@@ -102,6 +102,9 @@ class mesh(object):
     v_res[i] is a list of all elements which verts[i] is a part of
   """
 
+  def __init__(self,fname):
+    self.readMesh(fname)
+
   def readMesh(self,fname):
     """Read in nodes and values from a tetgen files
     
@@ -113,20 +116,21 @@ class mesh(object):
       skip = 0
       for line in f:#for each line in the file
         #if not a comment
-        if(line.split[0][0] != "#"):
+        if(line.split()[0][0] != "#"):
           if(getFormat):
             tmp = [int(s) for s in line.split()[0:5]]
             #generate matrix of empty 0's
             self.verts = np.zeros((tmp[0], tmp[1]))
             #make a vector of False
             self.v_is_bndry = [False for i in range(tmp[0])]
+            self.v_res = [[] for i in range(tmp[0])]
             skip = tmp[2]# num of attributes
             if(tmp[3] == 0):
               raise NameError("node file must have boundary markers")
             getFormat = False
           else:
             s = line.split()
-            idx = int(s.pop[0]) - 1#the node number
+            idx = int(s.pop(0)) - 1#the node number
             #populate the node values
             for i in range(self.verts.shape[1]):
               self.verts[(idx,i)] = float(s.pop(0))
@@ -139,17 +143,18 @@ class mesh(object):
     with open(fname + ".ele") as f:
       for line in f:#for every line in the file
         #if not comment
-        if(line.split[0][0] != "#"):
+        if(line.split()[0][0] != "#"):
           if(getFormat):
              tmp = [int(s) for s in line.split()[0:2]]
              #generate matrix of empty 0's
              self.poly = np.zeros((tmp[0],tmp[1]))
+             getFormat = False
           else:
             s = line.split()
-            idx = int(s.pop[0]) - 1#the poly number
+            idx = int(s.pop(0)) - 1#the poly number
             #populate the poly values
-            for i in range(self.verts.shape[1]):
+            for i in range(self.poly.shape[1]):
               nd = int(s.pop(0)) - 1
               self.poly[(idx,i)] = nd#add node to this element
-              self.v_res[i].append(idx)#add this element nodes residence list
+              self.v_res[nd].append(idx)#add this element nodes residence list
     
