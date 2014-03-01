@@ -132,6 +132,25 @@ class polynom(object):
   def dif(self):
     """Generates the gradient of the polynomial
     """
+    toret = [];
+    
+    if(self.dim == 1):
+      toret.append( polynom(self.dim,self.deg - 1, np.delete(self.coef,0,0)) )
+      for n in range(toret[0].deg+1):
+        toret[0].coef[n] *= n+1
+    
+    elif(self.dim == 2):
+      toret.append( polynom(self.dim,self.deg - 1, np.delete(np.delete(self.coef,0,0),-1,1) ) )
+      toret.append( polynom(self.dim,self.deg - 1, np.delete(np.delete(self.coef,0,1),-1,0) ) )
+      for n in range(toret[0].deg+1):
+        toret[0].coef[n,:] *= n+1
+      for n in range(toret[1].deg+1):
+        toret[1].coef[:,n] *= n+1
+    
+    else:
+      raise NameError("%d-d polynomials not supported"%self.dim)
+    
+    return toret
 
 class mesh(object):
   """A mesh for the grid
