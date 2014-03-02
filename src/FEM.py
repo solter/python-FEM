@@ -111,17 +111,18 @@ class polynom(object):
     return self.__add__(self,other)
 
   def __sub__(self,p2):
-    return self.__add__(self,-1*p2)
+    return self.__add__(-1*p2)
 
   def __rsub__(self,p2):
-    return self.__sub__(p2,self)
+    self = -1*self
+    return self + p2
 
   def __mul__(p1, p2):
     #transform scalar into polynomial
     if(np.isscalar(p2)):
       tmp = p2
-      p2 = polynom(self.dim,0)
-      p2.addElem(tuple(np.zeros(self.dim,dtype=int)),tmp)
+      p2 = polynom(p1.dim,0)
+      p2.addElem(tuple(np.zeros(p1.dim,dtype=int)),tmp)
    
     #initialize polynomial
     toret = polynom(p1.dim, p2.deg + p1.deg)
@@ -147,7 +148,7 @@ class polynom(object):
 
   #variation on multiplication
   def __rmul__(p1,p2):
-    return __mul__(p1,p2)
+    return p1.__mul__(p2)
 
   def diff(self, var = 0, norm = True):
     """Generates the derivative w.r.t. x<var> of the polynomial
@@ -219,13 +220,13 @@ class polynom(object):
 
     elif(self.dim==2):
       #for all nonzero elements
-      if(x[0] == 't' and x[1] == 't'):
-        raise NameError("One value must be a number")
-      elif(x[0] == 't' or x[1] == 't'):
+      if(x[0] == 't' or x[1] == 't'):
         toret = polynom(1,self.deg)
 
       for idx in zip(self.coef.nonzero()[0],self.coef.nonzero()[1]):
-        if(x[0] == 't'):
+        if(x[0] == 't' and x[1] == 't'):
+          toret.addElem((idx[0] + idx[1],),self.coef[idx])
+        elif(x[0] == 't'):
           toret.addElem((idx[0],),self.coef[idx] * x[1]**idx[1])
         elif(x[1] == 't'):
           toret.addElem((idx[1],),self.coef[idx] * x[0]**idx[0])
@@ -244,27 +245,32 @@ class polynom(object):
     elements must be either numbers or 't'
       Examples:
         1D: 
-        integrate((0,),(1,)) = int_0^1 dx (returns a number)
-        integrate((0,),('t',)) = int_0^t dx (returns a polynomial)
+        integrate((0,),(1,)) = int_0^1 f dx (returns a number)
+        integrate((0,),('t',)) = int_0^t f dx (returns a polynomial)
 
         2D:
-        integrate((0,0),(1,2)) = int_0^1 int_0^2 dx0 dx1 (returns a number)
-        integrate((0,0),(1,'t')) = int_0^1 int_0^x1 dx0 dx1 (returns a number)
-        integrate((0,0),('t','t')) = int_0^t int_0^x1 dx0 dx1 (returns a 1d polynomial)
+        integrate((0,0),(1,2)) = int_0^1 int_0^2 f dx0 dx1 (returns a number)
+        integrate((0,0),(1,'t')) = int_0^1 int_0^x1 f dx0 dx1 (returns a number)
+        integrate((0,0),('t','t')) = int_0^t int_0^x1 f dx0 dx1 (returns a 1d polynomial)
     """
     
     if(self.dim == 1):
       p = self.diff(0,False)
-      if(x1[0] == x2[0]):
+      if(x1[0] == x0[0]):
         return 0
       elif(x1[0] == 't'):
-        return p - self(x0[0])
+        return p - p((x0[0],))
       elif(x0[0] == 't'):
-        return self(x1[0]) - p
+        return p((x1[0],)) - p
       else:
-        return self(x1[0]) - self(x0[0])
+        return p((x1[0],)) - p((x0[0],))
     elif(self.dim == 2):
-      pass
+      if(x1[0] == x0[0] or x1[1] == x0[1]):
+        return 0
+      else:
+        p1 = self.diff(0,False)
+        p1 = p1((x1[1],'t')) - p1((x0[1],'t'))
+        return p1.integrate((x0[0],),(x1[0],))
     else:
       raise NameError("%d-d Polynomials not supported"%self.dim)
          
