@@ -273,7 +273,95 @@ class polynom(object):
         return p1.integrate((x0[0],),(x1[0],))
     else:
       raise NameError("%d-d Polynomials not supported"%self.dim)
-         
+
+  def getFlatCoef(self, x, diffOrder=0, diffVariable=()):
+    """Gets the coeficients of polynomial when evaluated at x
+
+    returns a 1-d array of values
+    Parameters:
+    x -> n-dimensional point to evaluate at
+    diffOrder -> If this polynomial represents a diffOrder^th 
+      derivative,the output array will be coefficients of original
+      polynomial
+    diffVariable -> if diffOrder != 0, this is a tuple of length
+      poly.dim. Where diffVariable[i] represents the number of
+      derivatives taken w.r.t. the i^th variable.
+      By default all derivatives are assumed to be taken w.r.t
+      the 0^th variable
+    """
+    
+    if(len(diffVariable) == 0):
+        diffVariable = diffVariable + (diffOrder,)
+        for i in range(1,self.dim):
+          diffVariable = diffVariable + (0,)
+    
+    if(diffOrder != sum(diffVariable)):
+      raise NameError("diffVariable and diffOrder mismatch")
+
+    if(len(diffVariable) != self.dim):
+      raise NameError("diffVariable must be of dimension %d"%self.dim)
+
+    if(len(x) != self.dim):
+      raise NameError("x must be of dimension %d"%self.dim)
+
+    if(self.dim==1):
+      toret = np.zeros(self.deg+1 + diffOrder)
+      #for all nonzero elements
+      for idx in zip(self.coef.nonzero()[0]):
+        toret[idx[0] + diffOrder] = self.coef[idx] * x[0]**idx[0]
+
+    elif(self.dim==2):
+      #zeros of length n*(n+1)/2, where n = self.deg + 1 + diffOrder
+      toret = np.zeros(((self.deg + 1 + diffOrder)*(self.deg + 1 + diffOrder + 1))/2)
+      for idx in zip(self.coef.nonzero()[0],self.coef.nonzero()[1]):
+        diag = idx[0] + diffVariable[0] + idx[1] + diffVariable[1]
+        flatIdx = sum(range(1,diag + 1)) + idx[1] + diffVariable[1]
+        toret[flatIdx] += self.coef[idx] * x[0]**idx[0] * x[1]**idx[1]
+    
+    else:
+      raise NameError("%d-d polynomials not supported"%self.dim)
+    
+    return toret
+
+  def setFlatCoef(self,flatCoef):
+    """Takes a 1-D array and uses it to establish coeficients
+
+    NOTE: the polynomial must be initialized with the appropriate
+    dimension and degree before calling this
+    Parameters:
+    coef -> the coefficients in a flat matrix.
+    If coef is empty, will create a polynomial with 1's as all coefficients
+    Examples:
+    1D: [1 1 0 -4] <-> 1 + x -4x^3
+    2D (deg 3): [1 1 0 -4 5 0 -.5 0 0 1] <-> 1 + x0 -4 x0^2 +5 x0 x1 -.5 x0^3 + x1^3
+    """
+    
+    if(self.dim == 1):
+      if(len(flatCoef) == 0):
+        flatCoef = np.ones(self.deg + 1)
+      
+      if(len(flatCoef) != self.deg + 1):
+        raise NameError("flatCoef incorrect length")
+
+      self.coef = np.array(flatCoef)
+      return
+
+    elif(self.dim == 2):
+      totlen = ((self.deg + 1)*(self.deg + 2))/2
+      if(len(flatCoef) == 0):
+        flatCoef = np.ones(totlen)
+
+      if(len(flatCoef) != totlen):
+        raise NameError("flatCoef incorrect length")
+
+      for diag in range(self.deg+1):
+        for col in range(diag+1):
+          idx = (diag - col,col)
+          flatIdx = sum(range(1,diag + 1)) + col
+          self.coef[idx] = flatCoef[flatIdx]
+      
+    else:
+      raise NameError("%d-d Polynomials not supported"%self.dim)
 
 class mesh(object):
   """A mesh for the grid
