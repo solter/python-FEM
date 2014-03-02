@@ -152,6 +152,28 @@ class polynom(object):
     
     return toret
 
+  def __call__(self,x):
+    """Evaluates the polynomial at x
+    """
+    
+    if(len(x) != self.dim):
+      raise NameError("Input need the right dimensions")
+
+    toret = 0
+    if(self.dim==1):
+      #for all nonzero elements
+      for idx in zip(self.coef.nonzero()[0]):
+        toret += self.coef[idx] * x[0]**idx[0]
+
+    elif(self.dim==2):
+      #for all nonzero elements
+      for idx in zip(self.coef.nonzero()[0],self.coef.nonzero()[1]):
+        toret += self.coef[idx] * x[0]**idx[0] * x[1]**idx[1]
+    else:
+      raise NameError("%d-d polynomials not supported"%self.dim)
+    
+    return toret
+
 class mesh(object):
   """A mesh for the grid
 
