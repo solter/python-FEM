@@ -18,7 +18,7 @@ class polynom(object):
     if(coef.size > 0):
       self.coef = coef
     else:
-      self.coef = np.zeros((self.deg+1)*np.ones(self.dim))
+      self.coef = np.zeros((self.deg+1)*np.ones(self.dim),dtype=float)
 
   def addElem(self, idx, coef):
     """Add nonzero polynomial element
@@ -79,7 +79,13 @@ class polynom(object):
         toret = self.__genStr(tmp, toret);
       return toret
 
-  def __add__(p1, p2):
+  def __add__(p1, p2): 
+    #transform scalar into polynomial
+    if(np.isscalar(p2)):
+      tmp = p2
+      p2 = polynom(self.dim,0)
+      p2.addElem(tuple(np.zeros(self.dim,dtype=int)),tmp)
+  
     dim = p1.dim
     if(dim != p2.dim):
       raise NameError("polynomial dimension mismatch")
@@ -129,27 +135,48 @@ class polynom(object):
     
     return toret
   
-  def dif(self):
-    """Generates the gradient of the polynomial
+  def diff(self, var = 0, norm = True):
+    """Generates the derivative w.r.t. x<var> of the polynomial
+    
+    Parameters:
+    var : the variable to take the derivative w.r.t
+    norm : If False this will find the antiderivative
     """
-    toret = [];
     
     if(self.dim == 1):
-      toret.append( polynom(self.dim,self.deg - 1, np.delete(self.coef,0,0)) )
-      for n in range(toret[0].deg+1):
-        toret[0].coef[n] *= n+1
-    
+      if(var != 0):
+        raise NameError("Only valid variable is x0")
+        
+      if(norm):#if a derivative
+        toret = polynom(self.dim,self.deg - 1, np.delete(self.coef,0,0))
+        for n in range(toret.deg+1):
+          toret.coef[n] *= n+1
+      else:#the antiderivative
+        toret = polynom(self.dim, self.deg + 1, np.insert(self.coef,0,np.zeros(1),0))
+        for n in range(1,toret.deg+1):
+          toret.coef[n] /= n
+      
     elif(self.dim == 2):
-      toret.append( polynom(self.dim,self.deg - 1, np.delete(np.delete(self.coef,0,0),-1,1) ) )
-      toret.append( polynom(self.dim,self.deg - 1, np.delete(np.delete(self.coef,0,1),-1,0) ) )
-      for n in range(toret[0].deg+1):
-        toret[0].coef[n,:] *= n+1
-      for n in range(toret[1].deg+1):
-        toret[1].coef[:,n] *= n+1
-    
-    else:
-      raise NameError("%d-d polynomials not supported"%self.dim)
-    
+      if(not (var == 0 or var == 1)):
+        raise NameError("Only valid variables are x0 and x1")
+      
+      if(norm):#if a derivative
+        toret = polynom(self.dim,self.deg - 1, np.delete(np.delete(self.coef,0,var),-1,1 - var) ) 
+        for n in range(toret.deg+1):
+          if(var==0):
+            toret.coef[n,:] *= n+1
+          else:
+            toret.coef[:,n] *= n+1
+      else:#the antiderivate
+        toret = polynom(self.dim, self.deg + 1, np.insert(\
+            np.insert(self.coef,0-var, np.zeros(self.deg+1),0),\
+            -1+var,np.zeros(self.deg + 2),1))
+        for n in range(1,toret.deg+1):
+          if(var==0):
+            toret.coef[n,:] /= n
+          else:
+            toret.coef[:,n] /= n
+      
     return toret
 
   def __call__(self,x):
@@ -173,6 +200,27 @@ class polynom(object):
       raise NameError("%d-d polynomials not supported"%self.dim)
     
     return toret
+
+  def integrate(self,x0,x1):
+    """integrate polynomial from x0 to x1
+    
+    Parameters:
+    x0,x1 -> tuples representing the endpoints of integration.
+    elements must be either numbers or 't'
+      Examples:
+        1D: 
+        integrate((0,),(1,)) = int_0^1 dx (returns a number)
+        integrate((0,),('t',)) = int_0^t dx (returns a polynomial)
+
+        2D:
+        integrate((0,0),(1,2)) = int_0^1 int_0^2 dx0 dx1 (returns a number)
+        integrate((0,0),(1,'t')) = int_0^1 int_0^x1 dx0 dx1 (returns a number)
+        integrate((0,0),('t','t')) = int_0^t int_0^x1 dx0 dx1 (returns a 1d polynomial)
+    """
+    
+    if(self.dim == 1):
+      pass
+        
 
 class mesh(object):
   """A mesh for the grid
