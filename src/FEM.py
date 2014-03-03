@@ -1,5 +1,8 @@
 import numpy as np
 import scipy as sp
+import string
+import importlib
+import math
 
 class polynom(object):
   """A class to deal with 1D and 2D polynomials.
@@ -386,7 +389,7 @@ class mesh(object):
     """
     getFormat = True
     #parse the node file
-    with open(fname + ".node") as f:
+    with open(fname + ".node",'r') as f:
       skip = 0
       for line in f:#for each line in the file
         #if not a comment
@@ -396,7 +399,7 @@ class mesh(object):
             #generate matrix of empty 0's
             self.verts = np.zeros((tmp[0], tmp[1]))
             #make a vector of False
-            self.v_is_bndry = [False for i in range(tmp[0])]
+            self.v_is_bndry = [0 for i in range(tmp[0])]
             self.v_res = [[] for i in range(tmp[0])]
             skip = tmp[2]# num of attributes
             if(tmp[3] == 0):
@@ -410,7 +413,7 @@ class mesh(object):
               self.verts[(idx,i)] = float(s.pop(0))
             #if it's a boundary node, mark it as such
             if(int(s[skip]) != 0):
-              self.v_is_bndry[idx] = True
+              self.v_is_bndry[idx] = int(s[skip])
     
     getFormat = True
     #parse the ele file
@@ -431,4 +434,167 @@ class mesh(object):
               nd = int(s.pop(0)) - 1
               self.poly[(idx,i)] = nd#add node to this element
               self.v_res[nd].append(idx)#add this element nodes residence list
+
+class FEMcalc(object):
+  """The base class which calculates FEM for a problem
+  """
+
+  #class attributes
+  dim = 0 #dimension of the problem
+  polyDeg = 0 #degree of polynomial approximation
+  reg = 0 #regularity of basis functions
+  domain = None #mesh of domain
+  bdry = {} #dictionary defining what to do with B.V.'s
+  blin = [[],[]] #list of operations the bilinear form applies
+  lin = [[],[]] #linear form
+  funcmod = None #module with user defined functions
+
+  def __init__(self,fname="FEM.setup"):
+    self.parseInputFile(fname)
+
+  def parseInputFile(self, fname):
+    """See example .setup file for how this parses
+    stuff -> note that lines beginning with # are comments"""
+    with open(fname,'r') as fl:
+      secType = -1 #section types are 
+      #0-MESH:, 1-SPACE:, 2-FEM_FORM: 3-FUNCTION_FILE
+      for line in fl:#for every line in the file
+        rdln = line.split()
+        if(len(rdln) == 0):
+          #skip empty lines
+          continue
+        if(rdln[0][0] == "#"):
+          #skip comments
+          continue
+        
+        #check for section type
+        if(rdln[0] == "MESH:"):
+          secType = 0
+          continue
+        if(rdln[0] == "SPACE:"):
+          secType = 1
+          continue
+        if(rdln[0] == "FEM_FORM:"):
+          secType = 2
+          continue
+        if(rdln[0] == "FUNCTION_FILE:"):
+          secType = 3
+          continue
+
+        #parse the sections
+        if(secType == 0):#MESH:
+          if(rdln[0] == "file="):
+            self.domain = mesh(rdln[1])
+            self.dim = self.domain.verts.shape[1]
+
+          elif(rdln[0].isdigit()):
+            self.bdry[int(rdln[0])] = rdln[1]
+
+        elif(secType ==1):#SPACE:
+          if(rdln[0] == "PD"):
+            try:
+              self.polyDeg = int(rdln[1])
+            except ValueError:
+              raise NameError("polynomial degree must be an integer")
+          elif(rdln[0] == "REG"):
+            try:
+              self.reg = int(rdln[1])
+            except ValueError:
+              raise NameError("regularity must be an integer")
+
+        elif(secType == 2):#FEM_FORM:
+          if(rdln[0] == "a(u,v)="):
+            rdln.pop(0)
+            pos = 0
+            inu = -1
+            while (rdln[0] != "|"):
+              nelem = rdln.pop(0)
+              if(nelem == "("):
+                self.blin[0].append([])
+                self.blin[1].append([])
+                inu = 0
+              elif(nelem == "grad"):
+                self.blin[inu][pos].append('grad')
+                rdln.pop(0)
+              elif(nelem == ","):
+                inu  = 1 
+              elif(nelem == "u" or nelem == "v"):
+                self.blin[inu][pos].append('eval')
+                self.blin[inu][pos].append(nelem)
+              elif(nelem == "+" and inu >= 0):
+                self.blin[inu][pos].append('plus')
+              elif(nelem == "-"):
+                self.blin[inu][pos].append('sub')
+              elif(nelem == ")"):
+                inu = -1
+
+          elif(rdln[0] == "L(v)="):
+            rdln.pop(0)
+            pos = 0
+            inu = -1
+            while (rdln[0] != "|"):
+              nelem = rdln.pop(0)
+              if(nelem == "("):
+                self.lin[0].append([])
+                self.lin[1].append([])
+                inu = 0
+              elif(nelem == "grad"):
+                self.lin[inu][pos].append('grad')
+                rdln.pop(0)
+              elif(nelem == ","):
+                inu  = 1 
+              elif(nelem == "v"):
+                self.lin[inu][pos].append('eval')
+                self.lin[inu][pos].append('v')
+              elif(nelem == "+" and inu >= 0):
+                self.lin[inu][pos].append('plus')
+              elif(nelem == "-"):
+                self.lin[inu][pos].append('sub')
+              elif(nelem == ")"):
+                inu = -1
+              elif(inu == 0):
+                self.lin[inu][pos].append('eval')
+                self.lin[inu][pos].append(nelem)
+
+          elif(rdln[0] == "funcfile="):
+            funcmod = importlib.import_module(rdln[1])
+
+    #check that regularity is possible with polynomial degree
+    if(self.deg < 1):
+      self.deg = 1
+
+    if(self.dim == 1):
+      if(self.deg + 1 < 2*self.reg + 2):
+        self.deg = 2*self.reg + 1
+        print ("Polynomial degree was insufficient to achieve\n 
+          requested regularity. Polynomial degree reset to %d\n"%self.deg)
+    elif(self.dim == 2):
+      if((self.deg + 1)*(self.deg+2) < 3*(self.reg + 1)*(self.reg + 2):
+        self.deg = math.ceil(math.sqrt(3*(self.reg+1)*(self.reg+2)-1.5) - 1.5)
+        print ("Polynomial degree was insufficient to achieve\n 
+          requested regularity. Polynomial degree reset to %d\n"%self.deg)
+
+
+  def genRefBasis(self):
+    """Generates basis functions on the reference element
+
+    Note that in 1D, the reference element is [0,1],
+    and in 2D the reference element is the triangle
+    defined by the points (0,0), (0,1), (1,1)
+    
+    The degrees of freedom are below
+    default 1D DOF:
+    enough derivatives to satisfy regularity on boundary,
+    and regulary spaced points between
+    default 2D DOF (supports only regularity = 0):
+    uses equi-distant points along the border, as well as the corners.
+    if needed, uses the midpoint as well
+    """
+    if(self.dim == 1):
+        
+    elif(self.dim == 2):
+      if(self.reg > 0 and len(DOF) == 0):
+        raise NameError("Regularity degree %d not supported for 2d"%self.reg)
+    else:
+      raise NameError("%d-d polynomials not supported"%self.dim)
     

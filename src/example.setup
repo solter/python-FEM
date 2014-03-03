@@ -1,0 +1,50 @@
+#Setup file for FEM method
+
+#all lines beginning with hash (#) are comments
+#anything added after necesary stuff (after space) is a comment
+#All whitespace shown is necesary, but extra whitespace
+#is ok. e.g. 1HD is bad, 1 HD is good, 1    HD works too
+
+#Each section is all capitalized and
+#ends with a colon (:)
+#the sections can be in any order
+
+#Mesh definition file
+MESH:
+#location and base name for mesh files
+#This must have a <name>.node and <name>.ele file
+file= meshes/test2D
+#definition of boundary values
+#each integer represents a different boundary flag
+#in the <name>.node file, and the 0 flag represents
+#that it is not a boundary
+#Each different flag looks as follows
+1 HD #flag 1 is homogenous dirichlet boundary
+#2 HN #flag 2 is homogenous dirichlet boundary
+#3 N g #flag 3 is neuman satisfying du/dn|_bndry = g
+#4 D g #flag 4 is dirichlet satisfying u|_bndry = g
+
+#definition of FE space to search definition for
+#These are not checked for consistency, so be careful
+SPACE:
+PD 3 #polynomial approximation of degree 3
+REG 0 #space regularity of degree 0 (so C, no C^1)
+
+#definition of FEM formulation
+FEM_FORM:
+#bilinear LHS, spaces necesary, u & v necesary.
+#the | at the end indicates end of expression
+a(u,v)= ( grad u , grad v ) |
+#linear RHS, spaces necesary, v necesary.
+#the | at the end indicates end of expression
+L(v)= ( f , v ) |
+#supported operations: 
+# ( - u , v ) -> L2 inner product of - u and v on domain
+# ( u , v ) -> L2 inner product of u and v on domain
+# ( grad u , grad v ) -> L2 inner product of grad u with grad v
+# these operations can be added together
+
+#file containing user defined python functions to use
+#these must match the function names used above which were
+#not u or v
+funcfile= supFunc #looks for supFunc.py in current directory
