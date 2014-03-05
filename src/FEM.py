@@ -18,11 +18,13 @@ class polynom(object):
     """
     self.dim = dim
     self.deg = deg
+    self.coef = np.zeros((self.deg+1)*np.ones(self.dim),dtype=float)
     if(coef.size > 0):
-      self.coef = coef
-    else:
-      self.coef = np.zeros((self.deg+1)*np.ones(self.dim),dtype=float)
-
+      if(coef.ndim == dim):
+        self.coef = coef
+      else:
+        self.setFlatCoef(coef)
+        
   def addElem(self, idx, coef):
     """Add nonzero polynomial element
     
@@ -153,6 +155,10 @@ class polynom(object):
   def __rmul__(p1,p2):
     return p1.__mul__(p2)
 
+  #copy to not get have same stuff referenced
+  def copy(self):
+    return polynom(self.dim, self.deg, self.coef.copy())
+
   def diff(self, var = 0, norm = True):
     """Generates the derivative w.r.t. x<var> of the polynomial
     
@@ -246,17 +252,26 @@ class polynom(object):
     Parameters:
     x0,x1 -> tuples representing the endpoints of integration.
     elements must be either numbers or 't'
+    if empty uses example 1.1 and 2.2
       Examples:
         1D: 
-        integrate((0,),(1,)) = int_0^1 f dx (returns a number)
-        integrate((0,),('t',)) = int_0^t f dx (returns a polynomial)
+        1.1 integrate((0,),(1,)) = int_0^1 f dx (returns a number)
+        1.2 integrate((0,),('t',)) = int_0^t f dx (returns a polynomial)
 
         2D:
-        integrate((0,0),(1,2)) = int_0^1 int_0^2 f dx0 dx1 (returns a number)
-        integrate((0,0),(1,'t')) = int_0^1 int_0^x1 f dx0 dx1 (returns a number)
-        integrate((0,0),('t','t')) = int_0^t int_0^x1 f dx0 dx1 (returns a 1d polynomial)
+        1.1 integrate((0,0),(1,2)) = int_0^1 int_0^2 f dx0 dx1 (returns a number)
+        1.2 integrate((0,0),(1,'t')) = int_0^1 int_0^x1 f dx0 dx1 (returns a number)
+        1.3 integrate((0,0),('t','t')) = int_0^t int_0^x1 f dx0 dx1 (returns a 1d polynomial)
     """
-    
+   
+    if(len(x0) == 0):
+      if(self.dim == 1):
+        x0 = (0,)
+        x1 = (1,)
+      elif(self.dim == 2):
+        x0 = (0,0)
+        x1 = (1,'t')
+
     if(self.dim == 1):
       p = self.diff(0,False)
       if(x1[0] == x0[0]):
@@ -448,10 +463,12 @@ class FEMcalc(object):
   blin = [[],[]] #list of operations the bilinear form applies
   lin = [[],[]] #linear form
   funcmod = None #module with user defined functions
+  refPolys = [] #polynomials on the reference element
+  elemStiffMat = np.array([]);
 
   def __init__(self,fname="FEM.setup"):
     self.parseInputFile(fname)
-
+    
   def parseInputFile(self, fname):
     """See example .setup file for how this parses
     stuff -> note that lines beginning with # are comments"""
@@ -560,20 +577,19 @@ class FEMcalc(object):
             funcmod = importlib.import_module(rdln[1])
 
     #check that regularity is possible with polynomial degree
-    if(self.deg < 1):
-      self.deg = 1
+    if(self.polyDeg < 1):
+      self.polyDeg = 1
 
     if(self.dim == 1):
-      if(self.deg + 1 < 2*self.reg + 2):
-        self.deg = 2*self.reg + 1
-        print ("Polynomial degree was insufficient to achieve\n 
-          requested regularity. Polynomial degree reset to %d\n"%self.deg)
+      if(self.polyDeg + 1 < 2*self.reg + 2):
+        self.polyDeg = 2*self.reg + 1
+        print ("Polynomial degree was insufficient to achieve\n \
+          requested regularity. Polynomial degree reset to %d\n"%self.polyDeg)
     elif(self.dim == 2):
-      if((self.deg + 1)*(self.deg+2) < 3*(self.reg + 1)*(self.reg + 2):
-        self.deg = math.ceil(math.sqrt(3*(self.reg+1)*(self.reg+2)-1.5) - 1.5)
-        print ("Polynomial degree was insufficient to achieve\n 
-          requested regularity. Polynomial degree reset to %d\n"%self.deg)
-
+      if((self.polyDeg + 1)*(self.polyDeg+2) < 3*(self.reg + 1)*(self.reg + 2)):
+        self.polyDeg = math.ceil(math.sqrt(3*(self.reg+1)*(self.reg+2)-1.5) - 1.5)
+        print ("Polynomial degree was insufficient to achieve\n \
+          requested regularity. Polynomial degree reset to %d\n"%self.polyDeg)
 
   def genRefBasis(self):
     """Generates basis functions on the reference element
@@ -586,15 +602,113 @@ class FEMcalc(object):
     default 1D DOF:
     enough derivatives to satisfy regularity on boundary,
     and regulary spaced points between
+    The returned list will correspond to the following elements being 1:
+    [f[0] f'[0] ... f^(r)[0] f[1/n] f[2/n] ... f[n-1/n] f^(r)[1] ... f'[1] f[1]]
     default 2D DOF (supports only regularity = 0):
     uses equi-distant points along the border, as well as the corners.
     if needed, uses the midpoint as well
+    The returned list will correspond to the following elements being 1:
+    [f[0,0] f[0,1/DOF] ... f[0,1] f[1/DOF,1/DOF] ... f[1/DOF,1] ... f[1,1] ]
     """
+    
+    if(self.dim == 0):
+      raise NameError("Must define dimension before getting RefBasis")
+
+    ptmp = polynom(self.dim, self.polyDeg)
+    ptmp.setFlatCoef(())#generate dense polynomial of appropriate degree
+    nDOF = ptmp.getFlatCoef(self.dim*(0,)).shape#this is a tuple
+    coefMat = np.zeros(nDOF + nDOF,dtype=float)#nDOF by nDOF zeros
     if(self.dim == 1):
-        
+      rownum = 0
+      pd = ptmp.copy()
+      for i in range(self.reg+1):
+        coefMat[rownum] = pd.getFlatCoef((0,))
+        rownum += 1
+        coefMat[-rownum] = pd.getFlatCoef((1,))
+        pd = pd.diff()
+
+      for rn in range(rownum,nDOF - rownum):
+        pt = (float(rn - rownum)/float(nDOF - 2*rownum),)
+        coefMat[rn] = ptmp.getFlatCoef(pt)
+
     elif(self.dim == 2):
-      if(self.reg > 0 and len(DOF) == 0):
+      if(self.reg > 0):
         raise NameError("Regularity degree %d not supported for 2d"%self.reg)
+
+      #Generate all the DOF points
+      rownum = -1
+      for x in np.arange(1. + 1./(self.polyDeg+1),1./self.polyDeg):#for x from [0,1]
+        for y in np.arange(i,1. + 1./(self.polyDeg+1),1./self.polyDeg):#for y from [x,1]
+          rownum += 1
+          coefMat[++rownum] = ptmp.getFlatCoef((x,y))
+
+      if(nDOF[0]%3 == 1):
+        rownum += 1
+        coefMat[rownum] = ptmp.getFlatCoef((x,y))
+
     else:
       raise NameError("%d-d polynomials not supported"%self.dim)
+     
+    #will solve and put coefficients along the rows
+    coefMat = np.linalg.solve(coefMat,np.eye(nDof[0])).transpose
+    self.refPolys = [polynom(coefMat[i]) for i in range(nDOF)] 
+    self.elemStiffMat = zeros(self.dim*(nDOF,))
+
+  def genElemStiffMat(self):
+    """Generates the element stiffness matrix
+    """
     
+    if(len(self.elemStiffMat) == 0):
+      raise NameError("Must generate polys on ref element before calling genElemStiffMat")
+
+    rownum = -1
+    #for each polynomial, on right hand side of inner product
+    for polyU in self.refPolys:
+      rownum += 1
+      colnum = -1
+      #for each term in blin form
+      polyLeft = []
+      for i in len(blin[0]):
+        #-----Left hand side--------
+        #if its a list of stuff
+        if(type(blin[0][i]) == list):
+          #for each element in this list
+          for j in len(blin[0][i]):
+            if(blin[0][i][j] == "grad"):
+              #calculate the gradient
+              for dim in range(self.dim):
+                polyLeft.append(polyU.diff(dim))
+            else:
+              raise NameError("%s not currently supported"%blin[0][i][j])
+        #else if its a string
+        else:
+          raise NameError("%s not currently supported"%blin[0][i])
+
+        #for each polynomial on left hand side of inner product
+        for polyV in self.refPolys: 
+          colnum += 1    
+          #----Right hand side-------
+          #if its a list of stuff
+          polyRight = []
+          if(type(blin[0][i]) == list):
+            #for each element in this list
+            for j in len(blin[0][i]):
+              if(blin[0][i][j] == "grad"):
+                #calculate the gradient            
+                for dim in range(self.dim):
+                  polyRight.append(polyV.diff(dim))
+            else:
+              raise NameError("%s not currently supported"%blin[0][i][j])
+          else:
+            raise NameError("%s not currently supported"%blin[0][i][j])
+            
+          #compute entry in stiffness matrix
+          if(len(polyLeft) != len(polyRight)):
+            raise NameError("Inner product has different dimensions on left and right")
+          
+          p2int = polynom(self.dim,0)
+          for i in range(len(polyLeft)):
+            p2int = p2int + polyLeft[i]*polyRight[i]
+
+          self.elemStiffMat[rownum,colnum] = p2int.integrate((),())
+
