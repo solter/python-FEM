@@ -3,11 +3,11 @@
 
 #Mesh definition file
 MESH:
-file= meshes/1deq80
+file= meshes/1deq5
 1 HD #flag 1 is homogenous dirichlet boundary
 
 SPACE:
-PD 2 #polynomial approximation of degree 3
+PD 3 #polynomial approximation of degree 3
 REG 0 #space regularity of degree 0 (so C, no C^1)
 
 #definition of FEM formulation
@@ -15,4 +15,4 @@ FEM_FORM:
 a(u,v)= ( grad u , grad v ) |
 L(v)= ( f , v ) |
 
-funcfile= testExp #looks for supFunc.py in current directory
+funcfile= prob1SupFunc #looks for supFunc.py in current directory

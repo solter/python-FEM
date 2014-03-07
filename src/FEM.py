@@ -1030,17 +1030,17 @@ class FEMcalc(object):
       trans = None
       vs = self.domain.poly[eleNum]
       if(self.dim == 1):
-        x2 = self.verts[vs[1]][0]
-        x1 = self.verts[vs[0]][0]
+        x2 = self.domain.verts[vs[1]][0]
+        x1 = self.domain.verts[vs[0]][0]
         #1/h
         trans = lambda x: (float(x[0]) - x1)/(x2 - x1)
       elif(self.dim == 2):
-        x3 = self.verts[vs[2]][0]
-        x2 = self.verts[vs[1]][0]
-        x1 = self.verts[vs[0]][0]
-        y3 = self.verts[vs[2]][1]
-        y2 = self.verts[vs[1]][1]
-        y1 = self.verts[vs[0]][1]
+        x3 = self.domain.verts[vs[2]][0]
+        x2 = self.domain.verts[vs[1]][0]
+        x1 = self.domain.verts[vs[0]][0]
+        y3 = self.domain.verts[vs[2]][1]
+        y2 = self.domain.verts[vs[1]][1]
+        y1 = self.domain.verts[vs[0]][1]
         #1/area of triangle = abs(jacobian)
         trans = lambda x: ( 
           (x1*x[1] - x2*x[1] - x[0]*y1 + x2*y1 + x[0]*y2 - x1*y2)/
@@ -1087,41 +1087,41 @@ class FEMcalc(object):
       
       return ((u >= 0) and (v >= 0) and (u + v < 1))
 
-  def pltSoln(self,xargs = []):
-    """plots the solution.
+def pltSoln(FEMcalcObj,xargs = []):
+  """plots the solution.
+  
+  Parameters:
+  xargs -> 
+  a list containing a function handle and string.
+  This will be plotted along with the solution
+  """
+  if(FEMcalcObj.dim == 1):
+    x = FEMcalcObj.domain.verts
+    y = np.zeros(len(x))
+    if(len(xargs) == 2):
+      y1 = np.zeros(len(x))
+    for i in range(len(x)):
+      y[i] = FEMcalcObj(x[i])
+      if(len(xargs) == 2):
+        y1[i] = xargs[0](x[i])
     
-    Parameters:
-    xargs -> 
-    a list containing a function handle and string.
-    This will be plotted along with the solution
-    """
-    if(self.dim == 1):
-      x = self.domain.verts
-      y = np.zeros(len(x))
-      if(len(xargs) == 2):
-        y1 = np.zeros(len(x))
-      for i in range(len(x)):
-        y[i] = self(x[i])
-        if(len(xargs) == 2):
-          y1[i] = xargs[0](x[i])
-      
-      plt.figure()
-      plt.plot(x,y,label = 'num. soln.')
-      if(len(xargs) == 2):
-        plt.plot(x,y1,label = xargs[1])
-        plt.legend(loc=2)
+    plt.figure()
+    plt.plot(x,y,label = 'num. soln.')
+    if(len(xargs) == 2):
+      plt.plot(x,y1,label = xargs[1])
+      plt.legend(loc=2)
 
-    elif(self.dim == 2):
+  elif(FEMcalcObj.dim == 2):
 
-      fig = plt.figure()
-      ax = fig.add_subplot(111, projection='3d')
-      
-      x = self.domain.verts[:,0]
-      y = self.domain.verts[:,1]
-      z = np.zeros(len(x))
-      for i in range(len(z)):
-        z[i] = self((x[i],y[i]))
-      ax.plot_trisurf(x, y, z, linewidth=0.2)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    
+    x = FEMcalcObj.domain.verts[:,0]
+    y = FEMcalcObj.domain.verts[:,1]
+    z = np.zeros(len(x))
+    for i in range(len(z)):
+      z[i] = FEMcalcObj((x[i],y[i]))
+    ax.plot_trisurf(x, y, z, cmap=plt.cm.jet,linewidth=0.2)
 
-    plt.show()
+  plt.show()
 

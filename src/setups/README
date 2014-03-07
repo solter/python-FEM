@@ -1,0 +1,16 @@
+The setup files are organized as follows:
+
+*prob<1,2>_<#>_<1,2,3>.setup
+The first number indicates which problem this applies to
+The second number indicates the mesh size used
+The 3rd number represents the polynomial space used (note that the 2-d problems
+did not use cubics in the interest of time)
+
+Necesary files are the following:
+../*prob<1,2>SupFunc.py
+The supplementary functions (in this case the right hand side)
+for the problem number
+
+../meshes/<#>deq<#>.<node,ele>
+The meshes. The first number is 1 or 2, the second number
+is the number of elements along the bottom-ish
