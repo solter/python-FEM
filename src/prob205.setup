@@ -1,0 +1,18 @@
+#Setup file for FEM method
+#Problem 1 with 40 elements
+
+#Mesh definition file
+MESH:
+file= meshes/2deq5
+1 HD #flag 1 is homogenous dirichlet boundary
+
+SPACE:
+PD 2 #polynomial approximation of degree 3
+REG 0 #space regularity of degree 0 (so C, no C^1)
+
+#definition of FEM formulation
+FEM_FORM:
+a(u,v)= ( grad u , grad v ) |
+L(v)= ( f , v ) |
+
+funcfile= prob2SupFunc #looks for supFunc.py in current directory

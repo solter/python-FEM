@@ -1,8 +1,15 @@
 import numpy as np
+import numpy.linalg as la
 import scipy as sp
+import scipy.sparse as sparse
+import scipy.integrate as integrate
+import scipy.sparse.linalg as spla
 import string
 import importlib
 import math
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
 
 class polynom(object):
   """A class to deal with 1D and 2D polynomials.
@@ -192,9 +199,15 @@ class polynom(object):
           else:
             toret.coef[:,n] *= n+1
       else:#the antiderivate
-        toret = polynom(self.dim, self.deg + 1, np.insert(\
-            np.insert(self.coef,0-var, np.zeros(self.deg+1),0),\
-            -1+var,np.zeros(self.deg + 2),1))
+        if(var == 0):
+          idx1 = 0
+          idx2 = self.deg+1
+        else:
+          idx1 = self.deg+1
+          idx2 = 0
+        tmpCoef =  np.insert(self.coef,idx1, np.zeros(self.deg+1),0)
+        tmpCoef = np.insert(tmpCoef,idx2,np.zeros(self.deg+2),1)
+        toret = polynom(self.dim, self.deg + 1, tmpCoef)
         for n in range(1,toret.deg+1):
           if(var==0):
             toret.coef[n,:] /= n
@@ -439,7 +452,7 @@ class mesh(object):
           if(getFormat):
              tmp = [int(s) for s in line.split()[0:2]]
              #generate matrix of empty 0's
-             self.poly = np.zeros((tmp[0],tmp[1]))
+             self.poly = np.zeros((tmp[0],tmp[1]),dtype=int)
              getFormat = False
           else:
             s = line.split()
@@ -450,25 +463,84 @@ class mesh(object):
               self.poly[(idx,i)] = nd#add node to this element
               self.v_res[nd].append(idx)#add this element nodes residence list
 
+  def refineMesh(self):
+    """refines the mesh"""
+    raise NameError("This function is currently broken")
+    Overts = self.verts.copy()
+    Ov_is_bndry = self.v_is_bndry.copy()
+    Opoly = self.poly.copy()
+    Ov_res = self.v_res.copy()
+
+    self.verts = Overts.tolist()
+    self.poly = np.zeros((2**self.dim * Opoly.shape[0],Opoly.shape[1]))
+    self.v_res = []
+    for i in len(Opoly):
+      if(self.dim == 1):
+        #THIS FAILS
+        nidx = len(self.verts)
+        self.vert.append((.5*Overts[Opoly[i][0]] + .5*Overts[Opoly[i][1]]).tolist())
+        self.poly[2*i] = [Opoly[i][0], nidx]
+        self.poly[2*i + 1] = [nidx, Opoly[i][1]]
+      elif(self.dim == 2):
+        #THIS FAILS
+        nidx = len(self.verts)
+        self.vert.append((.5*Overts[Opoly[i][0]] + .5*Overts[Opoly[i][1]]).tolist())
+        self.vert.append((.5*Overts[Opoly[i][1]] + .5*Overts[Opoly[i][2]]).tolist())
+        self.vert.append((.5*Overts[Opoly[i][2]] + .5*Overts[Opoly[i][0]]).tolist())
+        self.poly[4*i] = [Opoly[i][0], nidx, nIdx+2]
+        self.poly[4*i + 1] = [nidx, Opoly[i][1],nIdx+1]
+        self.poly[4*i + 2] = [nidx+1, Opoly[i][2], nidx+2]
+        self.poly[4*i + 3] = [nidx, nidx+1, nidx+2]
+
 class FEMcalc(object):
   """The base class which calculates FEM for a problem
   """
-
+  """
   #class attributes
   dim = 0 #dimension of the problem
   polyDeg = 0 #degree of polynomial approximation
   reg = 0 #regularity of basis functions
   domain = None #mesh of domain
-  bdry = {} #dictionary defining what to do with B.V.'s
+  bdry = {0:None} #dictionary defining what to do with B.V.'s
   blin = [[],[]] #list of operations the bilinear form applies
   lin = [[],[]] #linear form
   funcmod = None #module with user defined functions
   refPolys = [] #polynomials on the reference element
-  elemStiffMat = np.array([]);
+  elemStiffMat = np.array([]) #element stiffness matrix
+  dofs = [] #indices of corresponding basis function
+  globStiffMat = None#global stiffness matrix. TODO: sparse
+  rhs = None #Right hand side of linear equation
+  soln = None #The coefficients of the solution.
+  """
 
   def __init__(self,fname="FEM.setup"):
+    self.dim = 0 #dimension of the problem
+    self.polyDeg = 0 #degree of polynomial approximation
+    self.reg = 0 #regularity of basis functions
+    self.domain = None #mesh of domain
+    self.bdry = {0:None} #dictionary defining what to do with B.V.'s
+    self.blin = [[],[]] #list of operations the bilinear form applies
+    self.lin = [[],[]] #linear form
+    self.funcmod = None #module with user defined functions
+    self.refPolys = [] #polynomials on the reference element
+    self.elemStiffMat = np.array([]) #element stiffness matrix
+    self.dofs = [] #indices of corresponding basis function
+    self.globStiffMat = None#global stiffness matrix. 
+    self.rhs = None #Right hand side of linear equation
+    self.soln = None #The coefficients of the solution.
     self.parseInputFile(fname)
-    
+    self.genRefBasis()
+    self.genElemStiffMat()
+    self.genGlobalStiffMat()
+    self.genRHS()
+    self.findSolution()
+   
+  def refMesh(self):
+    self.domain.refineMesh()
+    self.genGlobalStiffMat()
+    self.genRHS()
+    self.findSolution()
+
   def parseInputFile(self, fname):
     """See example .setup file for how this parses
     stuff -> note that lines beginning with # are comments"""
@@ -493,9 +565,6 @@ class FEMcalc(object):
           continue
         if(rdln[0] == "FEM_FORM:"):
           secType = 2
-          continue
-        if(rdln[0] == "FUNCTION_FILE:"):
-          secType = 3
           continue
 
         #parse the sections
@@ -574,7 +643,8 @@ class FEMcalc(object):
                 self.lin[inu][pos].append(nelem)
 
           elif(rdln[0] == "funcfile="):
-            funcmod = importlib.import_module(rdln[1])
+            self.funcmod = importlib.import_module(rdln[1])
+            self.funcmod = reload(self.funcmod)
 
     #check that regularity is possible with polynomial degree
     if(self.polyDeg < 1):
@@ -608,7 +678,7 @@ class FEMcalc(object):
     uses equi-distant points along the border, as well as the corners.
     if needed, uses the midpoint as well
     The returned list will correspond to the following elements being 1:
-    [f[0,0] f[0,1/DOF] ... f[0,1] f[1/DOF,1/DOF] ... f[1/DOF,1] ... f[1,1] ]
+    [f[0,0] f[0,1/n] ... f[0,1] f[1/n,1] ... f[1,1] f[1-1/n,1-1/n]... f[1/n,1/n] ]
     """
     
     if(self.dim == 0):
@@ -618,6 +688,7 @@ class FEMcalc(object):
     ptmp.setFlatCoef(())#generate dense polynomial of appropriate degree
     nDOF = ptmp.getFlatCoef(self.dim*(0,)).shape#this is a tuple
     coefMat = np.zeros(nDOF + nDOF,dtype=float)#nDOF by nDOF zeros
+    nDOF = nDOF[0]
     if(self.dim == 1):
       rownum = 0
       pd = ptmp.copy()
@@ -626,33 +697,42 @@ class FEMcalc(object):
         rownum += 1
         coefMat[-rownum] = pd.getFlatCoef((1,))
         pd = pd.diff()
-
-      for rn in range(rownum,nDOF - rownum):
-        pt = (float(rn - rownum)/float(nDOF - 2*rownum),)
+      
+      for rn in range(rownum ,nDOF - rownum):
+        pt = (float(rn +1 - rownum)/float(nDOF - rownum),)
         coefMat[rn] = ptmp.getFlatCoef(pt)
-
+      
     elif(self.dim == 2):
       if(self.reg > 0):
         raise NameError("Regularity degree %d not supported for 2d"%self.reg)
-
+      
       #Generate all the DOF points
       rownum = -1
-      for x in np.arange(1. + 1./(self.polyDeg+1),1./self.polyDeg):#for x from [0,1]
-        for y in np.arange(i,1. + 1./(self.polyDeg+1),1./self.polyDeg):#for y from [x,1]
-          rownum += 1
-          coefMat[++rownum] = ptmp.getFlatCoef((x,y))
-
-      if(nDOF[0]%3 == 1):
+      nperSide = nDOF/3
+      for i in range(nperSide):
+        rownum += 1
+        coefMat[rownum] = ptmp.getFlatCoef((0,0 + float(i)/nperSide))
+      for i in range(nperSide):
+        rownum += 1
+        coefMat[rownum] = ptmp.getFlatCoef((0 + float(i)/nperSide,1))
+      for i in range(nperSide):
+        rownum += 1
+        coefMat[rownum] = ptmp.getFlatCoef((1 - float(i)/nperSide,1 - float(i)/nperSide))
+      
+      
+      if(nDOF%3 == 1):
         rownum += 1
         coefMat[rownum] = ptmp.getFlatCoef((x,y))
-
+      
     else:
       raise NameError("%d-d polynomials not supported"%self.dim)
      
     #will solve and put coefficients along the rows
-    coefMat = np.linalg.solve(coefMat,np.eye(nDof[0])).transpose
-    self.refPolys = [polynom(coefMat[i]) for i in range(nDOF)] 
-    self.elemStiffMat = zeros(self.dim*(nDOF,))
+    coefMat = la.solve(coefMat,np.eye(nDOF)).transpose()
+    self.refPolys = [
+      polynom(self.dim,self.polyDeg,coefMat[i]) 
+      for i in range(nDOF)]
+    self.elemStiffMat = np.zeros(2*(nDOF,))
 
   def genElemStiffMat(self):
     """Generates the element stiffness matrix
@@ -666,49 +746,382 @@ class FEMcalc(object):
     for polyU in self.refPolys:
       rownum += 1
       colnum = -1
-      #for each term in blin form
+      #for each term in self.blin form
       polyLeft = []
-      for i in len(blin[0]):
+      for i in range(len(self.blin[0])):
         #-----Left hand side--------
         #if its a list of stuff
-        if(type(blin[0][i]) == list):
+        if(type(self.blin[0][i]) == list):
           #for each element in this list
-          for j in len(blin[0][i]):
-            if(blin[0][i][j] == "grad"):
+          for j in range(len(self.blin[0][i])):
+            if(self.blin[0][i][j] == "grad"):
               #calculate the gradient
               for dim in range(self.dim):
                 polyLeft.append(polyU.diff(dim))
             else:
-              raise NameError("%s not currently supported"%blin[0][i][j])
+              raise NameError("%s not currently supported"%self.blin[0][i][j])
         #else if its a string
         else:
-          raise NameError("%s not currently supported"%blin[0][i])
-
+          raise NameError("%s not currently supported"%self.blin[0][i])
+        
         #for each polynomial on left hand side of inner product
         for polyV in self.refPolys: 
           colnum += 1    
           #----Right hand side-------
           #if its a list of stuff
           polyRight = []
-          if(type(blin[0][i]) == list):
+          if(type(self.blin[1][i]) == list):
             #for each element in this list
-            for j in len(blin[0][i]):
-              if(blin[0][i][j] == "grad"):
+            for j in range(len(self.blin[1][i])):
+              if(self.blin[1][i][j] == "grad"):
                 #calculate the gradient            
                 for dim in range(self.dim):
                   polyRight.append(polyV.diff(dim))
-            else:
-              raise NameError("%s not currently supported"%blin[0][i][j])
+              else:
+                raise NameError("%s not currently supported"%self.blin[0][i][j])
           else:
-            raise NameError("%s not currently supported"%blin[0][i][j])
+            raise NameError("%s not currently supported"%self.blin[0][i][j])
             
           #compute entry in stiffness matrix
           if(len(polyLeft) != len(polyRight)):
+            print polyLeft
+            print polyRight
             raise NameError("Inner product has different dimensions on left and right")
           
           p2int = polynom(self.dim,0)
-          for i in range(len(polyLeft)):
-            p2int = p2int + polyLeft[i]*polyRight[i]
-
+          for i2 in range(len(polyLeft)):
+            p2int = p2int + polyLeft[i2]*polyRight[i2]
+          
           self.elemStiffMat[rownum,colnum] = p2int.integrate((),())
+
+  def genGlobalStiffMat(self):
+    """Generates the global stiffness matrix
+    """
+    globDOF = 0
+    #find the global degrees of freedom, and arrange them appropriately
+    for eleNum in range(len(self.domain.poly)):
+      eleDOF = []
+      eleVerts = self.domain.poly[eleNum]
+      for i in range(len(self.refPolys)):
+        #figure out if this DOF corresponds with a vertex
+        vertNum = -1
+        if(i == 0):
+          vertNum = 0
+        elif(self.dim == 1 and i == len(self.refPolys)-1):
+          vertNum = 1
+        elif(self.dim == 2):
+          if(i==(len(self.refPolys)/3)):
+            vertNum = 1
+          if(i==2*(len(self.refPolys)/3)):
+            vertNum = 2
+        #if a vertex
+        if(vertNum >= 0):
+          dofEle = min(self.domain.v_res[eleVerts[vertNum]])
+          if(self.bdry[ self.domain.v_is_bndry[ eleVerts[vertNum] ] ] == "HD"):
+            eleDOF.append(-1)
+          elif(self.domain.v_is_bndry[ int(eleVerts[vertNum]) ] != 0):
+            raise NameError("boundry condition not supported")
+          elif(dofEle == eleNum):
+            eleDOF.append(globDOF)
+            globDOF += 1
+          else:
+            vidx = self.domain.poly[dofEle].tolist().index(eleVerts[vertNum])
+            if(self.dim == 1):
+              eleDOF.append(self.dofs[dofEle][-vidx])
+            else:
+              eleDOF.append(self.dofs[dofEle][vidx * (len(self.refPolys)/3)])
+        #if edge
+        elif(self.dim == 2 and i < len(self.refPolys) - 1):
+          tmp = i/(len(self.refPolys)/3)
+          vn1 = eleVerts[tmp]
+          vn2 = eleVerts[(tmp+1)%3]
+          #list of all triangles the edge is in
+          triIn = [k for k in self.domain.v_res[vn1] if k in self.domain.v_res[vn2]]
+          if(len(triIn) == 1):#the edge is on the boundary
+            eleDOF.append(-1)
+          elif(min(triIn) == eleNum):
+            eleDOF.append(globDOF)
+            globDOF += 1
+          else:
+            dofEle = min(triIn)
+            vidx = self.domain.poly[dofEle].tolist().index(vn1)
+            eleDOF.append(self.dofs[dofEle][vidx * (len(self.refPolys)/3) + i%(len(self.refPolys)/3)])
+          
+        #if interior
+        else:
+          eleDOF.append(globDOF)
+          globDOF += 1
+      
+      self.dofs.append(eleDOF)
+
+    self.globStiffMat = sparse.lil_matrix((globDOF,globDOF))
+
+    if(self.reg != 0):
+      raise NameError("%d-order regularity not supported",self.reg)
+
+    #for each mesh interval/triangle
+    for eleIdx in range(len(self.domain.poly)):
+      scale = 1. 
+      vs = self.domain.poly[eleIdx]
+      if(self.dim == 1):
+        x2 = self.domain.verts[vs[1]][0]
+        x1 = self.domain.verts[vs[0]][0]
+        #1/h
+        scale = abs((x2-x1))
+        scale = scale/scale**2 #2 gradients and an integral
+        
+      elif(self.dim == 2):
+        x3 = self.domain.verts[vs[2]][0]
+        x2 = self.domain.verts[vs[1]][0]
+        x1 = self.domain.verts[vs[0]][0]
+        y3 = self.domain.verts[vs[2]][1]
+        y2 = self.domain.verts[vs[1]][1]
+        y1 = self.domain.verts[vs[0]][1]
+        #1/area of triangle = abs(jacobian)
+        scale = (x3 - x2 )*( y2 - y1) + (x2 - x1)*(y3 - y2)
+        scale = abs(scale)/scale**2
+        
+      for i1 in range(len(self.dofs[eleIdx])):
+        rowIdx = self.dofs[eleIdx][i1]
+        if(rowIdx < 0):
+          continue
+        for i2 in range(i1, len(self.dofs[eleIdx])):
+          colIdx = self.dofs[eleIdx][i2]
+          if(colIdx < 0):
+            continue
+          
+          val = scale * self.elemStiffMat[i1,i2]
+          self.globStiffMat[rowIdx,colIdx] += val
+          if(rowIdx != colIdx):
+            self.globStiffMat[colIdx,rowIdx] += val
+
+    self.globStiffMat = self.globStiffMat.tocsr()
+
+  def genRHS(self):
+    """Generates the RHS for solve
+    """
+    self.rhs = np.zeros(self.globStiffMat.shape[0])
+    #calculate L(v)
+    for i in range(len(self.lin[0])):
+      #-----Left hand side--------
+      #if its a list of stuff
+      lhsFunc = None
+      if(type(self.lin[0][i]) == list):
+        #for each element in this list
+        skip = False
+        for j in range(len(self.lin[0][i])):
+          if(skip):
+            skip = False
+            continue
+          if(self.lin[0][i][j] == "eval"):
+            #save the function
+            skip = True
+            lhsFunc = getattr(self.funcmod,self.lin[0][i][j+1])
+          else:
+            raise NameError("%s not currently supported"%self.lin[0][i][j])
+      #else if its a string
+      else:
+        raise NameError("%s not currently supported"%self.lin[0][i])
+      
+      #----Right hand side-------
+      for eleIdx in range(len(self.domain.poly)):
+        #scaling factor
+        scale = 1. 
+        #transformation into reference element
+        trans = None
+        vs = self.domain.poly[eleIdx]
+        if(self.dim == 1):
+          x2 = self.domain.verts[vs[1]][0]
+          x1 = self.domain.verts[vs[0]][0]
+          #1/h
+          scale = abs((x2-x1))
+          #trans = lambda x: (float(x[0]) - x1)/(x2 - x1)
+          trans = lambda x: (x[0]*(x2-x1) + x1,) 
+          
+        elif(self.dim == 2):
+          x3 = self.domain.verts[vs[2]][0]
+          x2 = self.domain.verts[vs[1]][0]
+          x1 = self.domain.verts[vs[0]][0]
+          y3 = self.domain.verts[vs[2]][1]
+          y2 = self.domain.verts[vs[1]][1]
+          y1 = self.domain.verts[vs[0]][1]
+          #1/area of triangle = abs(jacobian)
+          scale = (x3 - x2 )*( y2 - y1) + (x2 - x1)*(y3 - y2)
+          scale = abs(scale)
+          #trans = lambda x: ( 
+          #  (x1*x[1] - x2*x[1] - x[0]*y1 + x2*y1 + x[0]*y2 - x1*y2)/
+          #    (x2*y1 - x3*y1 - x1*y2 + x3*y2 + x1*y3 - x2*y3)
+          #  , 
+          #  ((x3-x2)*(x[1] - y1) + (x[0]-x1)*(y2-y3))/
+          #    (x3*(y2-y1) + x2*(y1-y3) + x1*(y3-y2))
+          #  )
+          trans = lambda x: ( 
+            (x3 - x2)*x[0] + (x2 - x1)*x[1] + x1
+            , 
+            (y3-y2)*x[0] + (y2 - y1)*x[1] + y1
+            )
+
+        for i1 in range(len(self.dofs[eleIdx])):
+          rowIdx = self.dofs[eleIdx][i1]
+          if(rowIdx < 0):
+            continue
+          
+          #if its a list of stuff
+          rhsFunc = None
+          if(type(self.lin[1][i]) == list):
+            #for each element in this list
+            skipv = False
+            for j in range(len(self.lin[1][i])):
+              if(skipv):
+                skipv = False
+                continue
+              if(self.lin[1][i][j] == "eval"):
+                #save the function
+                skipv = True
+                rhsFunc = self.refPolys[i1]
+              else:
+                raise NameError("%s not currently supported"%self.lin[1][i][j])
+          else:
+            raise NameError("%s not currently supported"%self.lin[1][i][j])
+        
+          if(self.dim == 1):
+            tmp = scale *integrate.quad(
+              lambda x: lhsFunc(trans((x,))) * rhsFunc((x,)), 0,1
+            )[0]
+            self.rhs[rowIdx] += tmp
+          elif(self.dim ==2):
+            self.rhs[rowIdx] += scale *integrate.dblquad(
+              lambda x,y: lhsFunc(trans((x,y))) * rhsFunc((x,y)), 0,1,lambda x: 0, lambda x: x
+            )[0]
+
+  def findSolution(self):
+    """Finds the solution once everything has been created
+    """
+    self.soln = spla.spsolve(self.globStiffMat,self.rhs)
+ 
+  def __call__(self,x):
+    """Returns the value of the solution at x
+
+    If x is not inside the mesh, will return nan
+    """
+    if(x in self.domain.verts):
+      vidx = self.domain.verts.tolist().index(list(x))
+      pidx = min(self.domain.v_res[vidx])
+      vpidx = self.domain.poly[pidx].tolist().index(vidx)
+      if(self.dim==1):
+        solnIdx = self.dofs[pidx][-vpidx]
+      elif(self.dim==2):
+        solnIdx = self.dofs[pidx][vpidx * (len(self.refPolys)/3)]
+      #if its on the boundary
+      if(solnIdx < 0):
+        return 0.
+      else:
+        return self.soln[solnIdx]
+    else:
+      #determine which element it lies in
+      eleNum = 0
+      while(not self.__inside__(eleNum,x)):
+        eleNum += 1
+      
+      if(eleNum > len(self.domain.poly)):
+        return float('nan')
+      
+      val = 0.
+      trans = None
+      vs = self.domain.poly[eleNum]
+      if(self.dim == 1):
+        x2 = self.verts[vs[1]][0]
+        x1 = self.verts[vs[0]][0]
+        #1/h
+        trans = lambda x: (float(x[0]) - x1)/(x2 - x1)
+      elif(self.dim == 2):
+        x3 = self.verts[vs[2]][0]
+        x2 = self.verts[vs[1]][0]
+        x1 = self.verts[vs[0]][0]
+        y3 = self.verts[vs[2]][1]
+        y2 = self.verts[vs[1]][1]
+        y1 = self.verts[vs[0]][1]
+        #1/area of triangle = abs(jacobian)
+        trans = lambda x: ( 
+          (x1*x[1] - x2*x[1] - x[0]*y1 + x2*y1 + x[0]*y2 - x1*y2)/
+            (x2*y1 - x3*y1 - x1*y2 + x3*y2 + x1*y3 - x2*y3)
+          , 
+          ((x3-x2)*(x[1] - y1) + (x[0]-x1)*(y2-y3))/
+            (x3*(y2-y1) + x2*(y1-y3) + x1*(y3-y2))
+            )
+          
+      for i in range(len(self.refPolys)):
+        solnIdx = self.dofs[eleNum][i]
+        if(solnIdx < 0):
+          continue
+        print self.soln[solnIdx]
+        print self.refPolys(trans(x))
+        val += self.soln[solnIdx] * self.refPolys(trans(x))
+      print val
+      return val
+
+  def __inside__(self,eleNum,x):
+    vs = self.domain.poly[eleNum]
+    pts = np.zeros((self.dim+1,self.dim))
+    x = np.array(x)
+    for i in range(self.dim+1):
+      pts[i] = self.domain.verts[vs[i]]
+
+    if(self.dim == 1):
+      #this implies that x was greater than one point and less than the other point
+      return (pts[0][0] - x)*(pts[1][0] - x) < 0
+    elif(self.dim == 2):
+      v0 = pts[2] - pts[0]
+      v1 = pts[1] - pts[0]
+      v2 = x - pts[0]
+      #use barycentric coordinate method
+      dot00 = np.dot(v0, v0)
+      dot01 = np.dot(v0, v1)
+      dot02 = np.dot(pts, v2)
+      dot11 = np.dot(v1, v1)
+      dot12 = np.dot(v1, v2)
+      
+      invDenom = 1. / (dot00 * dot11 - dot01 * dot01)
+      u = (dot11 * dot02 - dot01 * dot12) * invDenom
+      v = (dot00 * dot12 - dot01 * dot02) * invDenom
+      
+      return ((u >= 0) and (v >= 0) and (u + v < 1))
+
+  def pltSoln(self,xargs = []):
+    """plots the solution.
+    
+    Parameters:
+    xargs -> 
+    a list containing a function handle and string.
+    This will be plotted along with the solution
+    """
+    if(self.dim == 1):
+      x = self.domain.verts
+      y = np.zeros(len(x))
+      if(len(xargs) == 2):
+        y1 = np.zeros(len(x))
+      for i in range(len(x)):
+        y[i] = self(x[i])
+        if(len(xargs) == 2):
+          y1[i] = xargs[0](x[i])
+      
+      plt.figure()
+      plt.plot(x,y,label = 'num. soln.')
+      if(len(xargs) == 2):
+        plt.plot(x,y1,label = xargs[1])
+        plt.legend(loc=2)
+
+    elif(self.dim == 2):
+
+      fig = plt.figure()
+      ax = fig.add_subplot(111, projection='3d')
+      
+      x = self.domain.verts[:,0]
+      y = self.domain.verts[:,1]
+      z = np.zeros(len(x))
+      for i in range(len(z)):
+        z[i] = self((x[i],y[i]))
+      ax.plot_trisurf(x, y, z, linewidth=0.2)
+
+    plt.show()
 
