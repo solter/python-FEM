@@ -119,7 +119,7 @@ with open("outputs/proj1Results.txt",'w') as f:
           h = 1./(2+meshSz[probNum][meshNum])
           h *= math.sqrt(2)
         
-        f.write(("\n %2d | %1.2e |"%(meshSz[probNum][meshNum],h)))
+        f.write(("\n %2d | %1.2e |"%(meshSz[probNum][meshNum]h)))
         for polyNum in range(len(poly[probNum])):
           f.write((" %1.2e |"%l2err[probNum][meshNum][polyNum]))
           if(meshNum == 0):
