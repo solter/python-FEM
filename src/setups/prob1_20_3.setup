@@ -3,7 +3,7 @@
 
 #Mesh definition file
 MESH:
-file= meshes/1deq40
+file= meshes/1deq20
 1 HD #flag 1 is homogenous dirichlet boundary
 
 SPACE:
