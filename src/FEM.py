@@ -878,8 +878,8 @@ class FEMcalc(object):
         y2 = self.domain.verts[vs[1]][1]
         y1 = self.domain.verts[vs[0]][1]
         #1/area of triangle = abs(jacobian)
-        scale = (x3 - x2 )*( y2 - y1) + (x2 - x1)*(y3 - y2)
-        scale = abs(scale)/scale**2
+        #scale = (x3 - x2 )*( y2 - y1) + (x2 - x1)*(y3 - y2)
+        #scale = abs(scale)/scale**2
         
       for i1 in range(len(self.dofs[eleIdx])):
         rowIdx = self.dofs[eleIdx][i1]

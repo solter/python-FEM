@@ -24,7 +24,7 @@ femsol = [[],[]]
 meshSz = [[],[]]
 poly = [[],[]]
 meshSz[0] = [5*2**i for i in range(5)]
-meshSz[1] = [5*2**i for i in range(3,4)]
+meshSz[1] = [5*2**i for i in range(2,4)]
 #meshSz[1] = [5*2**i for i in range(4)]
 poly[0] = range(1,4)
 poly[1] = range(1,3)
@@ -80,11 +80,11 @@ for probNum in range(len(femsol)):
       #save the plots
       if(probNum == 0):
         plt.savefig(nameStr + ".png") 
-        fignames[0] += nameStr + ".png\n"
+        fignames[probNum] += nameStr + ".png\n"
       elif(probNum == 1):
         plt.savefig(nameStr + ".png") 
         anim.rotanimate(ax, angles,nameStr + '.gif',delay=20)
-        fignames[0] += nameStr + ".png,  " + nameStr + ".gif\n" 
+        fignames[probNum] += nameStr + ".png,  " + nameStr + ".gif\n" 
 print 
 
 #Writing output
@@ -106,7 +106,7 @@ with open("outputs/proj1Results.txt",'w') as f:
     if(probNum == 0):
       f.write(" M  |    h     |")
       for polyNum in range(len(poly[probNum])):
-        f.write((" %d l2 err |   CR    |"%poly[probNum][polyNum]))
+        f.write((" %d l2 err |    CR    |"%poly[probNum][polyNum]))
       f.write("\n-----------")
       for polyNum in range(len(poly[probNum])):
         f.write("---------------------------")
@@ -123,9 +123,9 @@ with open("outputs/proj1Results.txt",'w') as f:
         for polyNum in range(len(poly[probNum])):
           f.write((" %1.2e |"%l2err[probNum][meshNum][polyNum]))
           if(meshNum == 0):
-            f.write("         |")
+            f.write("          |")
           else:
             f.write(("   %.2f   |"%conRate[probNum][meshNum][polyNum]))
     
-    f.write("The following are images of the solutions:")
+    f.write("\n\nThe following are images of the solutions:\n")
     f.write(fignames[probNum])
