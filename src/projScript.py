@@ -24,10 +24,10 @@ femsol = [[],[]]
 meshSz = [[],[]]
 poly = [[],[]]
 meshSz[0] = [5*2**i for i in range(5)]
-meshSz[1] = [5*2**i for i in range(2,4)]
+meshSz[1] = [5*2**i for i in range(3,4)]
 #meshSz[1] = [5*2**i for i in range(4)]
 poly[0] = range(1,4)
-poly[1] = range(1,3)
+poly[1] = range(2,3)
 #poly[1] = range(1,3)
 for probNum in range(len(femsol)):
   for meshNum in range(len(meshSz[probNum])):
