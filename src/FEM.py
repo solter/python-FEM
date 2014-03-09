@@ -1033,7 +1033,7 @@ class FEMcalc(object):
         x2 = self.domain.verts[vs[1]][0]
         x1 = self.domain.verts[vs[0]][0]
         #1/h
-        trans = lambda x: (float(x[0]) - x1)/(x2 - x1)
+        trans = lambda x: ((float(x[0]) - x1)/(x2 - x1),)
       elif(self.dim == 2):
         x3 = self.domain.verts[vs[2]][0]
         x2 = self.domain.verts[vs[1]][0]
@@ -1050,14 +1050,14 @@ class FEMcalc(object):
             (x3*(y2-y1) + x2*(y1-y3) + x1*(y3-y2))
             )
           
-      for i in range(len(self.refPolys)):
-        solnIdx = self.dofs[eleNum][i]
+      for rIdx in range(len(self.refPolys)):
+        solnIdx = self.dofs[eleNum][rIdx]
         if(solnIdx < 0):
           continue
-        print self.soln[solnIdx]
-        print self.refPolys(trans(x))
-        val += self.soln[solnIdx] * self.refPolys(trans(x))
-      print val
+        #print self.soln[solnIdx]
+        #print self.refPolys[rIdx](trans(x))
+        val += self.soln[solnIdx] * self.refPolys[rIdx](trans(x))
+      #print val
       return val
 
   def __inside__(self,eleNum,x):
@@ -1069,7 +1069,7 @@ class FEMcalc(object):
 
     if(self.dim == 1):
       #this implies that x was greater than one point and less than the other point
-      return (pts[0][0] - x)*(pts[1][0] - x) < 0
+      return (pts[0][0] - x[0])*(pts[1][0] - x[0]) < 0
     elif(self.dim == 2):
       v0 = pts[2] - pts[0]
       v1 = pts[1] - pts[0]
@@ -1077,7 +1077,7 @@ class FEMcalc(object):
       #use barycentric coordinate method
       dot00 = np.dot(v0, v0)
       dot01 = np.dot(v0, v1)
-      dot02 = np.dot(pts, v2)
+      dot02 = np.dot(v0, v2)
       dot11 = np.dot(v1, v1)
       dot12 = np.dot(v1, v2)
       
@@ -1094,6 +1094,10 @@ def pltSoln(FEMcalcObj,xargs = []):
   xargs -> 
   a list containing a function handle and string.
   This will be plotted along with the solution
+
+  Output:
+    if 1D - nothing
+    if 2D - the axis handle
   """
   if(FEMcalcObj.dim == 1):
     x = FEMcalcObj.domain.verts
@@ -1105,11 +1109,13 @@ def pltSoln(FEMcalcObj,xargs = []):
       if(len(xargs) == 2):
         y1[i] = xargs[0](x[i])
     
-    plt.figure()
+    fig = plt.figure()
     plt.plot(x,y,label = 'num. soln.')
     if(len(xargs) == 2):
       plt.plot(x,y1,label = xargs[1])
       plt.legend(loc=2)
+
+    return  
 
   elif(FEMcalcObj.dim == 2):
 
@@ -1123,5 +1129,4 @@ def pltSoln(FEMcalcObj,xargs = []):
       z[i] = FEMcalcObj((x[i],y[i]))
     ax.plot_trisurf(x, y, z, cmap=plt.cm.jet,linewidth=0.2)
 
-  plt.show()
-
+    return ax
