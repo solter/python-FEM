@@ -515,6 +515,7 @@ class FEMcalc(object):
   """
 
   def __init__(self,fname="FEM.setup"):
+    self.probType = 0 #problem type, 0 if elliptic, 1 if hyperbolic (only works for berger's equation)
     self.dim = 0 #dimension of the problem
     self.polyDeg = 0 #degree of polynomial approximation
     self.reg = 0 #regularity of basis functions
@@ -530,11 +531,16 @@ class FEMcalc(object):
     self.rhs = None #Right hand side of linear equation
     self.soln = None #The coefficients of the solution.
     self.parseInputFile(fname)
-    self.genRefBasis()
-    self.genElemStiffMat()
-    self.genGlobalStiffMat()
-    self.genRHS()
-    self.findSolution()
+
+    if(slf.probType == 0):
+      self.genRefBasis()
+      self.elemStiffMat = self.genElemStiffMat(self.blin)
+      self.genGlobalStiffMat = self.genGlobalStiffMat(self.elemStiffMat)
+      self.genRHS()
+      self.findSolution()
+
+    elif(self.probType == 1):
+      return
    
   def refMesh(self):
     self.domain.refineMesh()
@@ -607,7 +613,6 @@ class FEMcalc(object):
                 inu  = 1 
               elif(nelem == "u" or nelem == "v"):
                 self.blin[inu][pos].append('eval')
-                self.blin[inu][pos].append(nelem)
               elif(nelem == "+" and inu >= 0):
                 self.blin[inu][pos].append('plus')
               elif(nelem == "-"):
@@ -632,7 +637,6 @@ class FEMcalc(object):
                 inu  = 1 
               elif(nelem == "v"):
                 self.lin[inu][pos].append('eval')
-                self.lin[inu][pos].append('v')
               elif(nelem == "+" and inu >= 0):
                 self.lin[inu][pos].append('plus')
               elif(nelem == "-"):
@@ -642,7 +646,13 @@ class FEMcalc(object):
               elif(inu == 0):
                 self.lin[inu][pos].append('eval')
                 self.lin[inu][pos].append(nelem)
-
+          
+          elif(rdln[0] == "Berger"):
+            self.probType = 1
+            if(rdln[1] == "streamline"):
+              #TODO
+              pass
+          
           elif(rdln[0] == "funcfile="):
             self.funcmod = importlib.import_module(rdln[1])
             self.funcmod = reload(self.funcmod)
@@ -735,35 +745,43 @@ class FEMcalc(object):
       for i in range(nDOF)]
     self.elemStiffMat = np.zeros(2*(nDOF,))
 
-  def genElemStiffMat(self):
+  def genElemStiffMat(self, blin):
     """Generates the element stiffness matrix
     """
     
     if(len(self.elemStiffMat) == 0):
       raise NameError("Must generate polys on ref element before calling genElemStiffMat")
 
+    elemStiffMat = np.zeros(self.elemStiffMat.size)
     rownum = -1
     #for each polynomial, on right hand side of inner product
     for polyU in self.refPolys:
       rownum += 1
       colnum = -1
-      #for each term in self.blin form
+      #for each term in blin form
       polyLeft = []
-      for i in range(len(self.blin[0])):
+      for i in range(len(blin[0])):
         #-----Left hand side--------
         #if its a list of stuff
-        if(type(self.blin[0][i]) == list):
+        if(type(blin[0][i]) == list):
           #for each element in this list
-          for j in range(len(self.blin[0][i])):
-            if(self.blin[0][i][j] == "grad"):
+          for j in range(len(blin[0][i])):
+            if(blin[0][i][j] == "grad"):
               #calculate the gradient
               for dim in range(self.dim):
                 polyLeft.append(polyU.diff(dim))
+            elif(blin[0][i][j] == "lap"):
+              #calculate the lapacian
+              polyLeft.append(polynom(self.dim,0))
+              for dim in range(self.dim):
+                polyLeft[0] = polyLeft[0] + polyU.diff(dim).diff(dim)
+            elif(blin[0][i][j] == "eval"):
+              polyLeft.append(polyU)
             else:
-              raise NameError("%s not currently supported"%self.blin[0][i][j])
+              raise NameError("%s not currently supported"%blin[0][i][j])
         #else if its a string
         else:
-          raise NameError("%s not currently supported"%self.blin[0][i])
+          raise NameError("%s not currently supported"%blin[0][i])
         
         #for each polynomial on left hand side of inner product
         for polyV in self.refPolys: 
@@ -771,17 +789,24 @@ class FEMcalc(object):
           #----Right hand side-------
           #if its a list of stuff
           polyRight = []
-          if(type(self.blin[1][i]) == list):
+          if(type(blin[1][i]) == list):
             #for each element in this list
-            for j in range(len(self.blin[1][i])):
-              if(self.blin[1][i][j] == "grad"):
+            for j in range(len(blin[1][i])):
+              if(blin[1][i][j] == "grad"):
                 #calculate the gradient            
                 for dim in range(self.dim):
                   polyRight.append(polyV.diff(dim))
+              elif(blin[0][i][j] == "lap"):
+                #calculate the lapacian
+                polyLeft.append(polynom(self.dim,0))
+                for dim in range(self.dim):
+                  polyLeft[0] = polyLeft[0] + polyV.diff(dim).diff(dim)
+              elif(blin[0][i][j] == "eval"):
+                polyLeft.append(polyV)
               else:
-                raise NameError("%s not currently supported"%self.blin[0][i][j])
+                raise NameError("%s not currently supported"%blin[0][i][j])
           else:
-            raise NameError("%s not currently supported"%self.blin[0][i][j])
+            raise NameError("%s not currently supported"%blin[0][i][j])
             
           #compute entry in stiffness matrix
           if(len(polyLeft) != len(polyRight)):
@@ -793,69 +818,73 @@ class FEMcalc(object):
           for i2 in range(len(polyLeft)):
             p2int = p2int + polyLeft[i2]*polyRight[i2]
           
-          self.elemStiffMat[rownum,colnum] = p2int.integrate((),())
+          elemStiffMat[rownum,colnum] = p2int.integrate((),())
+           
+    return elemStiffMat
 
-  def genGlobalStiffMat(self):
+
+  def genGlobalStiffMat(self,elemStiffMat):
     """Generates the global stiffness matrix
     """
-    globDOF = 0
-    #find the global degrees of freedom, and arrange them appropriately
-    for eleNum in range(len(self.domain.poly)):
-      eleDOF = []
-      eleVerts = self.domain.poly[eleNum]
-      for i in range(len(self.refPolys)):
-        #figure out if this DOF corresponds with a vertex
-        vertNum = -1
-        if(i == 0):
-          vertNum = 0
-        elif(self.dim == 1 and i == len(self.refPolys)-1):
-          vertNum = 1
-        elif(self.dim == 2):
-          if(i==(len(self.refPolys)/3)):
+    if(len(self.dofs) == 0 ):
+      globDOF = 0
+      #find the global degrees of freedom, and arrange them appropriately
+      for eleNum in range(len(self.domain.poly)):
+        eleDOF = []
+        eleVerts = self.domain.poly[eleNum]
+        for i in range(len(self.refPolys)):
+          #figure out if this DOF corresponds with a vertex
+          vertNum = -1
+          if(i == 0):
+            vertNum = 0
+          elif(self.dim == 1 and i == len(self.refPolys)-1):
             vertNum = 1
-          if(i==2*(len(self.refPolys)/3)):
-            vertNum = 2
-        #if a vertex
-        if(vertNum >= 0):
-          dofEle = min(self.domain.v_res[eleVerts[vertNum]])
-          if(self.bdry[ self.domain.v_is_bndry[ eleVerts[vertNum] ] ] == "HD"):
-            eleDOF.append(-1)
-          elif(self.domain.v_is_bndry[ int(eleVerts[vertNum]) ] != 0):
-            raise NameError("boundry condition not supported")
-          elif(dofEle == eleNum):
-            eleDOF.append(globDOF)
-            globDOF += 1
-          else:
-            vidx = self.domain.poly[dofEle].tolist().index(eleVerts[vertNum])
-            if(self.dim == 1):
-              eleDOF.append(self.dofs[dofEle][-vidx])
+          elif(self.dim == 2):
+            if(i==(len(self.refPolys)/3)):
+              vertNum = 1
+            if(i==2*(len(self.refPolys)/3)):
+              vertNum = 2
+          #if a vertex
+          if(vertNum >= 0):
+            dofEle = min(self.domain.v_res[eleVerts[vertNum]])
+            if(self.bdry[ self.domain.v_is_bndry[ eleVerts[vertNum] ] ] == "HD"):
+              eleDOF.append(-1)
+            elif(self.domain.v_is_bndry[ int(eleVerts[vertNum]) ] != 0):
+              raise NameError("boundry condition not supported")
+            elif(dofEle == eleNum):
+              eleDOF.append(globDOF)
+              globDOF += 1
             else:
-              eleDOF.append(self.dofs[dofEle][vidx * (len(self.refPolys)/3)])
-        #if edge
-        elif(self.dim == 2 and i < len(self.refPolys) - 1):
-          tmp = i/(len(self.refPolys)/3)
-          vn1 = eleVerts[tmp]
-          vn2 = eleVerts[(tmp+1)%3]
-          #list of all triangles the edge is in
-          triIn = [k for k in self.domain.v_res[vn1] if k in self.domain.v_res[vn2]]
-          if(len(triIn) == 1):#the edge is on the boundary
-            eleDOF.append(-1)
-          elif(min(triIn) == eleNum):
+              vidx = self.domain.poly[dofEle].tolist().index(eleVerts[vertNum])
+              if(self.dim == 1):
+                eleDOF.append(self.dofs[dofEle][-vidx])
+              else:
+                eleDOF.append(self.dofs[dofEle][vidx * (len(self.refPolys)/3)])
+          #if edge
+          elif(self.dim == 2 and i < len(self.refPolys) - 1):
+            tmp = i/(len(self.refPolys)/3)
+            vn1 = eleVerts[tmp]
+            vn2 = eleVerts[(tmp+1)%3]
+            #list of all triangles the edge is in
+            triIn = [k for k in self.domain.v_res[vn1] if k in self.domain.v_res[vn2]]
+            if(len(triIn) == 1):#the edge is on the boundary
+              eleDOF.append(-1)
+            elif(min(triIn) == eleNum):
+              eleDOF.append(globDOF)
+              globDOF += 1
+            else:
+              dofEle = min(triIn)
+              vidx = self.domain.poly[dofEle].tolist().index(vn1)
+              eleDOF.append(self.dofs[dofEle][vidx * (len(self.refPolys)/3) + i%(len(self.refPolys)/3)])
+            
+          #if interior
+          else:
             eleDOF.append(globDOF)
             globDOF += 1
-          else:
-            dofEle = min(triIn)
-            vidx = self.domain.poly[dofEle].tolist().index(vn1)
-            eleDOF.append(self.dofs[dofEle][vidx * (len(self.refPolys)/3) + i%(len(self.refPolys)/3)])
-          
-        #if interior
-        else:
-          eleDOF.append(globDOF)
-          globDOF += 1
-      
-      self.dofs.append(eleDOF)
+        
+        self.dofs.append(eleDOF)
 
-    self.globStiffMat = sparse.lil_matrix((globDOF,globDOF))
+    globStiffMat = sparse.lil_matrix((globDOF,globDOF))
 
     if(self.reg != 0):
       raise NameError("%d-order regularity not supported",self.reg)
@@ -892,12 +921,12 @@ class FEMcalc(object):
           if(colIdx < 0):
             continue
           
-          val = scale * self.elemStiffMat[i1,i2]
-          self.globStiffMat[rowIdx,colIdx] += val
+          val = scale * elemStiffMat[i1,i2]
+          globStiffMat[rowIdx,colIdx] += scale * elemStiffMat[i1,i2]
           if(rowIdx != colIdx):
-            self.globStiffMat[colIdx,rowIdx] += val
+            globStiffMat[colIdx,rowIdx] += scale * elemStiffMat[i2,i1]
 
-    self.globStiffMat = self.globStiffMat.tocsr()
+    return globStiffMat.tocsr()
 
   def genRHS(self):
     """Generates the RHS for solve
@@ -1142,8 +1171,8 @@ def simpQuad(f,xl,xr):
   p5 =  0.555555555555556
   p8 =  0.888888888888889
 
-  toret = p5 * f( (xr - xl)/2. * (-1*pos - 1) + xr) +
-    p8 * f( (xr + xl)/2.)
+  toret = p5 * f( (xr - xl)/2. * (-1*pos - 1) + xr) +\
+    p8 * f( (xr + xl)/2.) +\
     p5 * f( (xr - xl)/2. * (pos - 1) + xr)
      
   return (xr - xl) * toret / 2.

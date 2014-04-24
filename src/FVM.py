@@ -185,7 +185,7 @@ class FVMcalc(object):
     
     #calculate polynomial, via Ac = b, where c is the coeficient list
     A = np.zeros((self.recOrder,self.recOrder),dtype=float)
-    b = np.zeros((1,self.recOrder))
+    b = np.zeros(self.recOrder)
     
     for i in range(self.recOrder):
       xl = self.domain.verts[self.domain.poly[stencil[i]][0]]
@@ -229,7 +229,12 @@ class FVMcalc(object):
     """
     if(self.numFlux == 0):
       if(ul < ur):
-        return 0
+        if(ul > 0):
+          return .5*ul*ul
+        elif(ur < 0):
+          return .5*ur*ur
+        else:#if ul < 0 and ur > 0
+          return 0
       elif(ur > ul):
         if(ur + ul > 0):
           return .5*ul*ul

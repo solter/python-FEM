@@ -43,6 +43,11 @@ L(v)= ( f , v ) |
 # ( u , v ) -> L2 inner product of u and v on domain
 # ( grad u , grad v ) -> L2 inner product of grad u with grad v
 # these operations can be added together
+Berger standard IC #overwrites previous options, uses Berger's equation
+#with either <standard> or <streamline>, and the 3rd argument is the function
+#name in supFunc for the initial condition. Assumes constant dirichlet B.C.'s
+#consistent with the I.C.
+
 
 #file containing user defined python functions to use
 #these must match the function names used above which were

@@ -38,3 +38,4 @@ nosetests.xml
 
 #ignore all outputs
 src/outputs/*
+src/outputs.zip
