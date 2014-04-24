@@ -400,7 +400,8 @@ class mesh(object):
   members:
   verts -> list of vertices. 
     verts[i] contains the coordinates for this vertex
-  v_is_bndry -> v_is_bndry[i] = True if verts[i] is on the boundary
+  v_is_bndry -> v_is_bndry[i] = integer code for being on the
+     boundary. 0 is reserved for internal nodes
   poly -> list of elements. 
     poly[i] contains a list of verts which define its borders
   v_res -> list of elements which the vertex's are in.
@@ -1119,7 +1120,7 @@ def pltSoln(FEMcalcObj,xargs = []):
     return  
 
   elif(FEMcalcObj.dim == 2):
-
+      
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     
@@ -1129,5 +1130,41 @@ def pltSoln(FEMcalcObj,xargs = []):
     for i in range(len(z)):
       z[i] = FEMcalcObj((x[i],y[i]))
     ax.plot_trisurf(x, y, z, cmap=plt.cm.jet,linewidth=0.2)
-
+    
     return ax
+
+def simpQuad(f,xl,xr):
+  """uses a 3 point quadrature to approximate the integral
+  of f from xl to xr
+  """
+  
+  pos = 0.774596669241483
+  p5 =  0.555555555555556
+  p8 =  0.888888888888889
+
+  toret = p5 * f( (xr - xl)/2. * (-1*pos - 1) + xr) +
+    p8 * f( (xr + xl)/2.)
+    p5 * f( (xr - xl)/2. * (pos - 1) + xr)
+     
+  return (xr - xl) * toret / 2.
+
+def timeStep(u, F, order, dt):
+  """Perform time integration up
+  u -> initial u
+  F -> u_t = F(u)
+  order -> 1: Forward Euler, 3: TVD RK3
+  dt -> timestep
+  """
+
+  u = np.array(u)
+  if(order == 1):#forward euler 
+    return ( u + dt * np.array(F(u)) )
+
+  elif(order == 3):#TVD RK3
+    unew = timeStep(u,F,1,dt)
+    unew = .75 * u + .25 * timeStep(unew,F,1,dt)
+    return (u/3. + 2/3 * timeStep(unew,F,1,dt))
+    
+  else:
+    raise NameError("timestep only supports orders 1 and 3")
+
