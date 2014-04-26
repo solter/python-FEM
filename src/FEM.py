@@ -518,7 +518,7 @@ class FEMcalc(object):
   soln = None #The coefficients of the solution.
   """
 
-  def __init__(self,fname="FEM.setup"):
+  def __init__(self,fname="FEM.setup",toplt = False):
     self.probType = 0 #problem type, 0 if elliptic, 1 if berger's FEM, 2 if berger's streamline
     self.dim = 0 #dimension of the problem
     self.polyDeg = 0 #degree of polynomial approximation
@@ -557,17 +557,17 @@ class FEMcalc(object):
       lval = self.IC(self.domain.verts[0][0])
       rval = self.IC(self.domain.verts[-1][0]) 
       
-      #form the mass matrix
-      tmpBlin = [[["eval"]],[["eval"]]]
-      tmpEle = self.genElemMat(tmpBlin) 
-      [self.globMassMat, self.bndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
-      
       #form the stiffness matrix
       tmpBlin = [[["grad"]],[["grad"]]]
       tmpEle = self.genElemMat(tmpBlin)
-      [self.globStiffMat, tmpBndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
+      [self.globStiffMat, self.bndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
       self.globStiffMat *= self.eps
-      self.bndry += self.eps * tmpBndry
+      self.bndry *= self.eps
+
+      #form the mass matrix
+      tmpBlin = [[["eval"]],[["eval"]]]
+      tmpEle = self.genElemMat(tmpBlin) 
+      [self.globMassMat, trash] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
       
       #take care of extra terms needed for streamline diffusion
       if(self.probType == 2):
@@ -575,19 +575,18 @@ class FEMcalc(object):
         #assume uniform interval width,
         #beta * h = max(endpoint value of IC) * (interval width)
         h = abs(\
-          self.domain.verts[self.domain.poly[0][1]] - self.domain.verts[self.domain.poly[0][0]]\
+          self.domain.verts[self.domain.poly[0][1]][0] - self.domain.verts[self.domain.poly[0][0]][0]\
           )*max(abs(lval),abs(rval))
         
         #mass matrix
         tmpBlin = [[["eval"]],[["grad"]]]
-        tmpEle = genElemMat(tmpBlin)
-        [tmpMat, tmpBndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
+        tmpEle = self.genElemMat(tmpBlin)
+        [tmpMat, trash] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
         self.globMassMat = self.globMassMat + h * tmpMat
-        self.bndry = self.bndry + h*tmpBndry
         
         #stiffness matrix
         tmpBlin = [[["grad"]],[["lap"]]]
-        tmpEle = genElemMat(tmpBlin)
+        tmpEle = self.genElemMat(tmpBlin)
         [tmpMat, tmpBndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
         self.globStiffMat = self.globStiffMat + self.eps * h * tmpMat
         self.bndry = self.bndry + self.eps * h * tmpBndry
@@ -600,7 +599,7 @@ class FEMcalc(object):
       self.initSoln(self.IC)
       
       #find solution
-      self.findSolution(self.maxT, self.cfl)
+      self.findSolution(self.maxT, self.cfl, toplt)
       return
    
   def refMesh(self):
@@ -883,17 +882,17 @@ class FEMcalc(object):
                 #calculate the gradient            
                 for dim in range(self.dim):
                   polyRight.append(polyV.diff(dim))
-              elif(blin[0][i][j] == "lap"):
+              elif(blin[1][i][j] == "lap"):
                 #calculate the lapacian
                 polyRight.append(polynom(self.dim,0))
                 for dim in range(self.dim):
                   polyRight[0] = polyRight[0] + polyV.diff(dim).diff(dim)
-              elif(blin[0][i][j] == "eval"):
+              elif(blin[1][i][j] == "eval"):
                 polyRight.append(polyV)
               else:
-                raise NameError("%s not currently supported"%blin[0][i][j])
+                raise NameError("%s not currently supported"%blin[1][i][j])
           else:
-            raise NameError("%s not currently supported"%blin[0][i][j])
+            raise NameError("%s not currently supported"%blin[1][i][j])
             
           #compute entry in stiffness matrix
           if(len(polyLeft) != len(polyRight)):
@@ -922,7 +921,8 @@ class FEMcalc(object):
       ux = polynom(self.dim,0)
       for i in range(len(self.dofs[eleIdx])):
         idx = self.dofs[eleIdx][i]
-        if(idx < 0):#deal with edges
+        if(idx < 0 ):#deal with edges
+          #print "edges to deal with"
           if(eleIdx == 0 and self.IC(xl) != 0):#left edge
             u = u + self.IC(xl) * self.refPolys[0]
             if(self.probType == 2):
@@ -935,27 +935,32 @@ class FEMcalc(object):
           u = u + coef[idx] * self.refPolys[i]
           if(self.probType == 2):
             ux = ux + coef[idx] * self.refPolys[i].diff()
-      
+     
       #populate the update vector for the quadratic term
       for i in range(len(self.dofs[eleIdx])):
         idx = self.dofs[eleIdx][i]
         if(idx >= 0):
           if(self.probType == 1):#FEM
             #integrate .5 * u^2 * phi_j'
+            print "u = %s"%u
             rhs[idx] += simpQuad(\
               lambda x: .5 * ( u( (x-xl)/(xr-xl) ) )**2 * \
-                self.refPolys[i].diff()( (x - xl)/(xr-xl) )/(xr - xl),\
+                self.refPolys[i].diff()( (x - xl)/(xr-xl) )*(xr - xl),\
               xl,xr)
           elif(self.probType == 2):#streamline
             #integrate u * u_x * (phi_j + h*phi_j')
-            #note that the h cancels out due to the derivative
+            #note that the h is squared due to the derivative
             rhs[idx] += simpQuad(lambda x: u( (x - xl)/(xr - xl) )*\
-              ux( (x - xl)/(xr - xl) )/(xr - xl) *\
+              ux( (x - xl)/(xr - xl) )*(xr - xl) *\
               ( self.refPolys[i]( (x - xl)/(xr - xl) ) +\
-              self.refPolys[i]( (x - xl)/(xr - xl) ) )\
+              self.refPolys[i].diff()( (x - xl)/(xr - xl) )*(xr-xl)**2 )\
               ,xl,xr)
-    
+ 
+    #print "Q = %s\nStiff = %s\nself.bndry = %s"%(rhs, self.globStiffMat, self.bndry)
+    print "rhs val = %g"%(max(rhs))
     rhs = rhs - self.globStiffMat.dot(coef) - self.bndry
+    print "rhs val = %g"%(max(rhs))
+    #print "Mass = %s\nrhs = %s"%(self.globMassMat, rhs)
     return spla.spsolve(self.globMassMat,np.array(rhs))
 
   def genGlobalMat(self,elemMat, blin = [["grad"],["grad"]], lval = 0, rval = 0):
@@ -1065,15 +1070,15 @@ class FEMcalc(object):
             globMat[rowIdx,colIdx] += scale * elemMat[i1,i2]
             if(rowIdx != colIdx):
               globMat[colIdx,rowIdx] += scale * elemMat[i2,i1]
-          elif( rowIdx >= 0  ):#if the column is a boundary term
+          elif( colIdx >= 0  ):#if the column is a boundary term
             #TODO: the following is extremely inelegant, 
             #works only for Berger's with hw B.C. eqn if lval or rval passed
             if(eleIdx == 0 and lval != 0):
-              bndryVec[rowIdx] += lval * scale * elemMat[i1,i2]
+              bndryVec[colIdx] += lval * scale * elemMat[i2,i1]
             elif(eleIdx == -1%len(self.domain.poly) and rval != 0):
-              bndryVec[rowIdx] += rval * scale * elemMat[i1,i2]
+              bndryVec[colIdx] += rval * scale * elemMat[i2,i1]
 
-    if(rval == 0 and lval == 0):
+    if(self.probType == 0):
       return globMat.tocsr()
     else:
       return [globMat.tocsr(), bndryVec]
@@ -1088,7 +1093,8 @@ class FEMcalc(object):
     xr = self.domain.verts[-1][0]
     dx = float(xr - xl)/numInt
     for i in range(0,len(self.soln)):
-      self.soln[i] = IC(xl + i*dx)
+      self.soln[i] = IC(xl + (i+1)*dx)
+    #print "interpolation = %s"%self.soln
 
   def genRHS(self):
     """Generates the RHS for solve
@@ -1187,7 +1193,7 @@ class FEMcalc(object):
               lambda x,y: lhsFunc(trans((x,y))) * rhsFunc((x,y)), 0,1,lambda x: 0, lambda x: x
             )[0]
 
-  def findSolution(self, maxT = 1, CFL_const = .5):
+  def findSolution(self, maxT = 1, CFL_const = .5, toplt = False):
     """Finds the solution once everything has been created
     """
     if(self.probType == 0):
@@ -1202,8 +1208,14 @@ class FEMcalc(object):
           self.domain.verts[self.domain.poly[0][0]][0]
         dt /= max(abs(self.soln))
         dt *= CFL_const
+        oldSol = self.soln
         self.soln = timeStep(self.soln, self.updateF, 1, dt)
         t += dt
+        if((t-dt)%(self.maxT/4) > t%(self.maxT)/4 and toplt):
+          pltSoln(self)
+          plt.title("t = %g"%(t))
+          plt.savefig("%s.%d.png"%(self.outputFile,int(100*t)))
+          plt.close()
         self.outputFile.write(\
           "\n\nt\t\t| vals\n%f | %s"%(t, self.soln))
  
@@ -1225,7 +1237,10 @@ class FEMcalc(object):
         solnIdx = self.dofs[pidx][vpidx * (len(self.refPolys)/3)]
       #if its on the boundary
       if(solnIdx < 0):
-        return 0.
+        if(self.IC == None):
+          return 0.
+        else:
+          return self.IC(x)
       else:
         return self.soln[solnIdx]
     else:
@@ -1311,6 +1326,10 @@ def pltSoln(FEMcalcObj,xargs = []):
     if 2D - the axis handle
   """
   if(FEMcalcObj.dim == 1):
+    y = [FEMcalcObj.domain.verts[0][0]] + FEMcalcObj.soln + [FEMcalcObj.domain.verts[-1][0]]
+    x = np.linspace(FEMcalcObj.domain.verts[0][0],FEMcalcObj.domain.verts[-1][0],len(y))
+    fig = plt.figure()
+    """
     x = FEMcalcObj.domain.verts
     y = np.zeros(len(x))
     if(len(xargs) == 2):
@@ -1319,13 +1338,13 @@ def pltSoln(FEMcalcObj,xargs = []):
       y[i] = FEMcalcObj(x[i])
       if(len(xargs) == 2):
         y1[i] = xargs[0](x[i])
+    """
     
     fig = plt.figure()
     plt.plot(x,y,label = 'num. soln.')
     if(len(xargs) == 2):
       plt.plot(x,y1,label = xargs[1])
       plt.legend(loc=2)
-
     return  
 
   elif(FEMcalcObj.dim == 2):
@@ -1342,20 +1361,25 @@ def pltSoln(FEMcalcObj,xargs = []):
     
     return ax
 
-def simpQuad(f,xl,xr):
+def simpQuad(f,xl,xr,numPoint = 3):
   """uses a 3 point quadrature to approximate the integral
   of f from xl to xr
   """
-  
-  pos = 0.774596669241483
-  p5 =  0.555555555555556
-  p8 =  0.888888888888889
+  toret = 0
 
-  toret = p5 * f( (xr - xl)/2. * (-1*pos - 1) + xr) +\
-    p8 * f( (xr + xl)/2.) +\
-    p5 * f( (xr - xl)/2. * (pos - 1) + xr)
-     
-  return 2. * toret / (xr - xl)
+  if(numPoint == 3):
+    pos = 0.774596669241483
+    p5 =  0.555555555555556
+    p8 =  0.888888888888889
+
+    toret += p5 * f( (xr - xl)/2. * (-1*pos - 1) + xr) 
+    toret += p8 * f( (xr - xl)/2. * (0 - 1) + xr) 
+    toret += p5 * f( (xr - xl)/2. * (pos - 1) + xr)
+       
+  elif(numPoint == 1):#midpoint rule
+    toret += f((xr + xl)/2)
+
+  return (xr - xl)/2. * toret
 
 def timeStep(u, F, order, dt):
   """Perform time integration up
@@ -1367,6 +1391,8 @@ def timeStep(u, F, order, dt):
 
   u = np.array(u)
   if(order == 1):#forward euler 
+    tmp = np.array(F(u))
+    print "maxChange = %g => %g"%(max(tmp), dt * max(tmp))
     return ( u + dt * np.array(F(u)) )
 
   elif(order == 3):#TVD RK3

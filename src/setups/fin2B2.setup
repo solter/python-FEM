@@ -29,6 +29,6 @@ numFlux= GLF
 #the second input is the name of the function used in the file
 initCondition= finalIC p2IC
 #how long to run the simulation to
-runTo= 0.05
-Output_file= out/2B05.dat
-CFL_CONST= .1
+runTo= 0.2
+Output_file= out/2B2.dat
+CFL_CONST= .5

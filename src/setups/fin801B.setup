@@ -15,7 +15,7 @@ streamline
 IC= p1IC 
 LAP_EPS= .01 
 TIME= .01 
-Output_file= out/prob1B80.dat 
+Output_file= out/fin801B.dat 
 CFL_CONST= .5 
 
 funcfile= finalIC

@@ -3,7 +3,7 @@
 
 #Mesh definition file
 MESH:
-file= meshes/fin40
+file= meshes/fin80
 1 HD #flag 1 is homogenous dirichlet boundary, not quite true in Berger
 
 SPACE:
@@ -12,10 +12,10 @@ PD 2 #polynomial approximation of degree 2
 #definition for berger's equation -> u_t + u_x = eps * u_xx
 BERGER:
 streamline
-IC= p1IC 
+IC= p1IC2
 LAP_EPS= .01 
 TIME= .2 
-Output_file= out/fin401B.dat 
+Output_file= out/fin801B2.dat 
 CFL_CONST= .5 
 
 funcfile= finalIC

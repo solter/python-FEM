@@ -14,8 +14,8 @@ BERGER:
 standard
 IC= p1IC 
 LAP_EPS= .01 
-TIME= .01 
-Output_file= out/prob1B80.dat 
+TIME= .2 
+Output_file= out/fin801A.dat 
 CFL_CONST= .5 
 
 funcfile= finalIC

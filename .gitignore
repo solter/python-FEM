@@ -40,3 +40,7 @@ nosetests.xml
 src/out/*
 src/outputs/*
 src/outputs.zip
+
+#ignore all latex extras
+*.aux
+*.log

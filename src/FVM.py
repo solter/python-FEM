@@ -16,7 +16,7 @@ from FEM import timeStep
 
 class FVMcalc(object):
   
-  def __init__(self, fname="FVM.setup"):
+  def __init__(self, fname="FVM.setup", toplt=False):
     self.domain = None #mesh of domain
     self.bdry = {0:None} #dictionary defining what to do with B.V.'s
     self.soln = None #The average cell values of the solution.
@@ -27,11 +27,12 @@ class FVMcalc(object):
     self.funcName = None #the name of the function file for the init condition
     self.endTime = 1. #the time to run simulation to
     self.outputFile = None
+    self.outputFileName = None
     self.cfl = 0.5 #cfl constant
 
     self.parseInputFile(fname)
     self.getStarted()
-    self.solnSteps()
+    self.solnSteps(toplt)
 
   def parseInputFile(self, fname):
     """See example .setup file for how this parses
@@ -101,7 +102,7 @@ class FVMcalc(object):
               raise NameError("CFL_CONST must be a float")
 
           elif(rdln[0] == "Output_file="):
-            self.outputFile = rdln[1]
+            self.outputFileName = rdln[1]
 
   def getStarted(self):
     #initialize solution to empty list
@@ -109,14 +110,14 @@ class FVMcalc(object):
 
     #generate first step
     for i in range(len(self.domain.poly)):
-      xl = self.domain.verts[self.domain.poly[i][0]]
-      xr = self.domain.verts[self.domain.poly[i][1]]
+      xl = self.domain.verts[self.domain.poly[i][0]][0]
+      xr = self.domain.verts[self.domain.poly[i][1]][0]
       self.soln[i] = simpQuad(self.initCond, xl, xr) / (xr - xl)
 
     #start recording to output file
-    if(self.outputFile == None):
-      self.outputFile = time.strftime("out/%Y_%M_%d_%H_%M_FVM.dat",time.localtime())
-    self.outputFile = open(self.outputFile,'w')
+    if(self.outputFileName == None):
+      self.outputFileName = time.strftime("out/%Y_%M_%d_%H_%M_FVM.dat",time.localtime())
+    self.outputFile = open(self.outputFileName,'w')
     self.outputFile.write(\
       "#FVM for Berger's eqn output with the following parameters:\n\
       #Reconstruction order = %d\n\
@@ -136,12 +137,13 @@ class FVMcalc(object):
    
     self.outputFile.write("\n\nt\t\t| vals\n%f | %s"%(0.0, self.soln))
 
-  def solnSteps(self):
+  def solnSteps(self, toplt = False):
     """Calculate steps and store them to output file
     """
     t = 0.0
     dt0 = self.domain.verts[self.domain.poly[0][1]][0] - \
       self.domain.verts[self.domain.poly[0][0]][0]
+    fignum = 0
     while(t < self.endTime):#step through problem until final solution
       dt = dt0
       #calculate dt, assume uniform partition
@@ -150,6 +152,12 @@ class FVMcalc(object):
       dt *= self.cfl
       self.soln = timeStep(self.soln, self.updateF, self.timeOrder, dt)
       t += dt
+      if((t-dt)%(self.endTime/4) > t%(self.endTime/4) and toplt):
+        fignum += 1
+        pltSoln(self)
+        plt.title("t = %g"%t)
+        plt.savefig("%s_%d.png"%(self.outputFileName.split(".")[0],fignum))
+        plt.close()
       self.outputFile.write(\
         "\n\nt\t\t| vals\n%f | %s"%(t, self.soln))
 
@@ -260,7 +268,6 @@ class FVMcalc(object):
   def updateF(self,u):
     """this calculates u_t = F(u)
     """
-    print "updating F"
 
     #get info at far left
     u = np.array(u)

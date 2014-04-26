@@ -20,7 +20,7 @@ file= meshes/fin160
 #This currently assumes Berger's equation
 FVM_FORM:
 #the order of reconstruction for point values
-recon_order= 1
+recon_order= 3
 #the order to use for the time integration, 1 or 3 supported
 timeOrder= 1
 #the numerical flux to use. "GLF" (global lax-freidrichs) and "Godunov" supported
@@ -29,7 +29,6 @@ numFlux= Godunov
 #the second input is the name of the function used in the file
 initCondition= finalIC p2IC
 #how long to run the simulation to
-runTo= 0.05
-#output file
-Output_file= out/2A05.dat
-CFL_CONST= 1
+runTo= 0.2
+Output_file= out/21.dat
+CFL_CONST= .5

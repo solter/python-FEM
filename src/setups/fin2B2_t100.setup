@@ -29,6 +29,6 @@ numFlux= Godunov
 #the second input is the name of the function used in the file
 initCondition= finalIC p2IC
 #how long to run the simulation to
-runTo= 1.
-Output_file= out/2A100.dat
-CFL_CONST= 1
+runTo= 1
+Output_file= out/2B2_t100.dat
+CFL_CONST= .5
