@@ -5,7 +5,7 @@
 #All whitespace shown is necesary, but extra whitespace
 #is ok. e.g. 1HD is bad, 1 HD is good, 1    HD works too
 
-#Each section is all capitalized and
+#Each section title is all capitalized and
 #ends with a colon (:)
 #the sections can be in any order
 
@@ -27,8 +27,10 @@ file= meshes/test2D
 #definition of FE space to search definition for
 #These are not checked for consistency, so be careful
 SPACE:
-PD 3 #polynomial approximation of degree 3
+PD 2 #polynomial approximation of degree 2
 REG 0 #space regularity of degree 0 (so C, no C^1)
+
+#only need the FEM_FORM section or the BERGER section
 
 #definition of FEM formulation
 FEM_FORM:
@@ -43,11 +45,21 @@ L(v)= ( f , v ) |
 # ( u , v ) -> L2 inner product of u and v on domain
 # ( grad u , grad v ) -> L2 inner product of grad u with grad v
 # these operations can be added together
-Berger standard IC #overwrites previous options, uses Berger's equation
-#with either <standard> or <streamline>, and the 3rd argument is the function
-#name in supFunc for the initial condition. Assumes constant dirichlet B.C.'s
-#consistent with the I.C.
 
+#file containing user defined python functions to use
+#these must match the function names used above which were
+#not u or v
+funcfile= supFunc #looks for supFunc.py in current directory
+
+#definition for berger's equation -> u_t + u_x = eps * u_xx
+BERGER:
+standard #or streamline. determines which type to use
+IC= f #the name of the initial condition function
+LAP_EPS= .01 #the epsilon value which multiplies the laplacian term
+TIME= 1. #the maximum time to run simulation to
+Output_file= outs/output.out #name of the output file to store stuff to
+CFL_CONST= .5 #optional cfl constant. used to calculate dt = cfl_const * dx / max |f'(u)|,
+#where dt is the timestep and dx is the mesh interval width
 
 #file containing user defined python functions to use
 #these must match the function names used above which were

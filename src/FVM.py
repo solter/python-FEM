@@ -60,9 +60,6 @@ class FVMcalc(object):
           if(rdln[0] == "file="):
             self.domain = mesh(rdln[1])
 
-          elif(rdln[0].isdigit()):
-            self.bdry[int(rdln[0])] = rdln[1]
-
         elif(secType ==1):#FVM_FORM:
           if(rdln[0] == "recon_order="):
             try:
@@ -107,18 +104,18 @@ class FVMcalc(object):
         )
 
     #start recording to output file
-    self.outputFile = open(
-      time.strftime("out/%Y_%M_%d_%H_%M_FVM.dat",time.localtime()),
+    self.outputFile = open(\
+      time.strftime("out/%Y_%M_%d_%H_%M_FVM.dat",time.localtime()),\
       'w')
-    self.outputFile.write(
-      "#FVM for Berger's eqn output with the following parameters:\n
-      #Reconstruction order = %d\n
-      #Numerical Flux Scheme %d (0 - godunov, 1 - GLF)\n
-      #Time integration order %d\n
-      #Initial condition %s\n,
-      #Endtime = %f\n#\nxs: " 
-      % (self.recOrder, self.numFlux, self.timeOrder, 
-      self.funcName, self.endTime)
+    self.outputFile.write(\
+      "#FVM for Berger's eqn output with the following parameters:\n\
+      #Reconstruction order = %d\n\
+      #Numerical Flux Scheme %d (0 - godunov, 1 - GLF)\n\
+      #Time integration order %d\n\
+      #Initial condition %s\n,\
+      #Endtime = %f\n#\nxs: " \
+      % (self.recOrder, self.numFlux, self.timeOrder, \
+      self.funcName, self.endTime)\
     )
 
     for i in range(len(self.domain.poly))
@@ -135,15 +132,15 @@ class FVMcalc(object):
     t = 0.0
     while(t < self.endTime):#step through problem until final solution
       #calculate dt, assume uniform partition
-      dt = self.domain.verts[self.poly[0][1]] - 
-        self.domain.verts[self.poly[0][0]]
+      dt = self.domain.verts[self.poly[0][1]][0] - 
+        self.domain.verts[self.poly[0][0]][0]
       dt /= max(abs(self.soln))
       if(self.timeorder > 1):
         #for stability in more accurate problems
         dt *= .5
-      self.soln = timeStep(self.soln, updateF, self.timeorder, dt)
+      self.soln = timeStep(self.soln, self.updateF, self.timeorder, dt)
       t += dt
-      self.outputFile.write(
+      self.outputFile.write(\
         "\n\nt\t\t| vals\n%f | %s"%(t, self.soln))
 
     self.outputFile.close();

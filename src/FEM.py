@@ -515,7 +515,7 @@ class FEMcalc(object):
   """
 
   def __init__(self,fname="FEM.setup"):
-    self.probType = 0 #problem type, 0 if elliptic, 1 if hyperbolic (only works for berger's equation)
+    self.probType = 0 #problem type, 0 if elliptic, 1 if berger's FEM, 2 if berger's streamline
     self.dim = 0 #dimension of the problem
     self.polyDeg = 0 #degree of polynomial approximation
     self.reg = 0 #regularity of basis functions
@@ -530,21 +530,75 @@ class FEMcalc(object):
     self.globStiffMat = None#global stiffness matrix. 
     self.rhs = None #Right hand side of linear equation
     self.soln = None #The coefficients of the solution.
-    self.parseInputFile(fname)
+    self.globMassMat = np.array([]) #global mass matrix
+    self.IC = None #initial condition
+    self.eps = 0 #the weight of the laplacian term
+    self.bndry = np.array([])
+    self.maxT = 0 #the maximum time to run the simulation to
+    self.outputFile = None #the name of the output file
+    self.cfl = .5 #the cfl constant used to determine the time step
 
-    if(slf.probType == 0):
-      self.genRefBasis()
-      self.elemStiffMat = self.genElemStiffMat(self.blin)
-      self.genGlobalStiffMat = self.genGlobalStiffMat(self.elemStiffMat)
+    self.parseInputFile(fname)
+    self.genRefBasis()
+    
+    if(self.probType == 0):
+      self.elemStiffMat = self.genElemMat(self.blin)
+      self.genGlobalMat = self.genGlobalMat(self.elemStiffMat)
       self.genRHS()
       self.findSolution()
 
-    elif(self.probType == 1):
+    else:
+      #extract the IC
+      self.IC = getattr(self.funcmod,self.IC)
+      lval = self.IC(self.domain.verts[0][0])
+      rval = self.IC(self.domain.verts[-1][0]) 
+      
+      #form the mass matrix
+      tmpBlin = [["eval"],["eval"]]
+      tmpEle = self.genElemMat(tmpBlin) 
+      [self.globMassMat, self.bndry] = self.genGlobMat(tmpEle, tmpBlin, lval, rval)
+      
+      #form the stiffness matrix
+      tmpBlin = [["grad"],["grad"]]
+      tmpEle = genElemMat(tmpBlin)
+      [self.globStiffMat, tmpBndry] = self.eps * self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
+      self.bndry += self.eps * tmpBndry
+      
+      #take care of extra terms needed for streamline diffusion
+      if(self.probType == 2):
+        
+        #assume uniform interval width,
+        #beta * h = max(endpoint value of IC) * (interval width)
+        h = abs(\
+          self.domain.verts[self.domain.poly[0][1]] - self.domain.verts[self.domain.poly[0][0]]\
+          )*max(abs(lval),abs(rval))
+        
+        #mass matrix
+        tmpBlin = [["eval"],["grad"]]
+        tmpEle = genElemMat(tmpBlin)
+        [tmpMat, tmpBndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
+        self.globMassMat = self.globMassMat + h * tmpMat
+        self.bndry = self.bndry + h*tmpBndry
+        
+        #stiffness matrix
+        tmpBlin = [["grad"],["lap"]]
+        tmpEle = genElemMat(tmpBlin)
+        [tmpMat, tmpBndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
+        self.globStiffMat = self.globStiffMat + self.eps * h * tmpMat
+        self.bndry = self.bndry + self.eps * h * tmpBndry
+      
+      #transform everything for column solutions
+      self.globStiffMat = self.globStiffMat.transpose()
+      self.globMassMat = self.globMassMat.transpose()
+      self.bndry = self.bndry.transpose()
+      
+      #find solution
+      self.findSolution(self.maxT, self.cfl)
       return
    
   def refMesh(self):
     self.domain.refineMesh()
-    self.genGlobalStiffMat()
+    self.genGlobalMat()
     self.genRHS()
     self.findSolution()
 
@@ -572,6 +626,9 @@ class FEMcalc(object):
           continue
         if(rdln[0] == "FEM_FORM:"):
           secType = 2
+          continue
+        if(rdln[0] == "BERGER:"):
+          secType = 3
           continue
 
         #parse the sections
@@ -647,11 +704,34 @@ class FEMcalc(object):
                 self.lin[inu][pos].append('eval')
                 self.lin[inu][pos].append(nelem)
           
-          elif(rdln[0] == "Berger"):
+          elif(rdln[0] == "funcfile="):
+            self.funcmod = importlib.import_module(rdln[1])
+            self.funcmod = reload(self.funcmod)
+
+        elif(secType == 3):
+          if(rdln[0] == "streamline"):
+            self.probType = 2
+          elif(rdln[0] == "standard"):
             self.probType = 1
-            if(rdln[1] == "streamline"):
-              #TODO
-              pass
+          elif(rdln[0] == "IC="):
+            self.IC = rdln[1]
+          elif(rdln[0] == "LAP_EPS="):
+            try:
+              self.eps = float(rdln[1])
+            except ValueError:
+              raise NameError("epsilon must be a float")
+          elif(rdln[0] == "TIME="):
+            try:
+              self.maxT = float(rdln[1])
+            except ValueError:
+              raise NameError("end time must be a float")
+          elif(rdln[0] == "Output_file="):
+            self.outputFile = rdln[1]
+          elif(rdln[0] == "CFL_CONST="):
+            try:
+              self.cfl = float(rdln[1])
+            except ValueError:
+              raise NameError("CFL_CONST must be a float")
           
           elif(rdln[0] == "funcfile="):
             self.funcmod = importlib.import_module(rdln[1])
@@ -745,12 +825,12 @@ class FEMcalc(object):
       for i in range(nDOF)]
     self.elemStiffMat = np.zeros(2*(nDOF,))
 
-  def genElemStiffMat(self, blin):
+  def genElemMat(self, blin):
     """Generates the element stiffness matrix
     """
     
     if(len(self.elemStiffMat) == 0):
-      raise NameError("Must generate polys on ref element before calling genElemStiffMat")
+      raise NameError("Must generate polys on ref element before calling genElemMat")
 
     elemStiffMat = np.zeros(self.elemStiffMat.size)
     rownum = -1
@@ -822,8 +902,57 @@ class FEMcalc(object):
            
     return elemStiffMat
 
+  def updateF(self, coef):
+    coef = np.array(coef)
+    rhs = np.zeros(coef.size)
+    
+    for eleIdx in range(len(self.domain.poly)):
+      vs = self.domain.poly[eleIdx]
+      xl = self.domain.verts[vs[0]][0]
+      xr = self.domain.verts[vs[1]][0]
+      
+      #construct u on this domain
+      u = polynom(self.dim,0)
+      ux = polynom(self.dim,0)
+      for i in range(len(self.dofs[eleIdx])):
+        idx = self.dofs[eleIdx][i]
+        if(idx < 0):#deal with edges
+          if(eleIdx == 0 && self.IC(xl) != 0):#left edge
+            u = u + self.IC(xl) * self.refPolys[0]
+            if(self.probType == 2)
+              ux = ux + self.IC(xl) * self.refPolys[0]
+          elif(eleIdx == len(self.domain.poly) - 1 && self.IC(xl) != 0):#right edge
+            u = u + self.IC(xr) * self.refPolys[-1]
+            if(self.probType == 2)
+              ux = ux + self.IC(xr) * self.refPolys[-1]
+        else:
+          u = u + coef[idx] * self.refPolys[i]
+          if(self.probType == 2):
+            ux = ux + coef[idx] * self.refPolys[i].diff()
+      
+      #populate the update vector for the quadratic term
+      for i in range(len(self.dofs[eleIdx])):
+        idx = self.dofs[eleIdx][i]
+        if(idx >= 0):
+          if(probType == 1):#FEM
+            #integrate .5 * u^2 * phi_j'
+            rhs[idx] += simpQuad(\
+              lambda x: .5 * ( u( (x-xl)/(xr-xl) ) )**2 * \
+                self.refPolys[i].diff()( (x - xl)/(xr-xl) )/(xr - xl),\
+              xl,xr)
+          elif(probType == 2):#streamline
+            #integrate u * u_x * (phi_j + h*phi_j')
+            #note that the h cancels out due to the derivative
+            rhs[idx] += simpQuad(lambda x: u( (x - xl)/(xr - xl) )*\
+              ux( (x - xl)/(xr - xl) )/(xr - xl) *\
+              ( self.refPolys[i]( (x - xl)/(xr - xl) ) +\
+              self.refPolys[i]( (x - xl)/(xr - xl) ) )\
+              ,xl,xr)
 
-  def genGlobalStiffMat(self,elemStiffMat):
+    rhs = rhs - self.globStiffMat.dot(coef) - self.bndry
+    return la.solve(self.globMassMat,rhs)
+
+  def genGlobalMat(self,elemMat, blin = [["grad"],["grad"]], lval = 0, rval = 0):
     """Generates the global stiffness matrix
     """
     if(len(self.dofs) == 0 ):
@@ -884,7 +1013,8 @@ class FEMcalc(object):
         
         self.dofs.append(eleDOF)
 
-    globStiffMat = sparse.lil_matrix((globDOF,globDOF))
+    globMat = sparse.lil_matrix((globDOF,globDOF))
+    bndryVec = np.zeros(globDOF)
 
     if(self.reg != 0):
       raise NameError("%d-order regularity not supported",self.reg)
@@ -898,7 +1028,14 @@ class FEMcalc(object):
         x1 = self.domain.verts[vs[0]][0]
         #1/h
         scale = abs((x2-x1))
-        scale = scale/scale**2 #2 gradients and an integral
+        pwr = 1
+        for lst in blin:
+          for ele in lst:
+            if(ele == "grad"):
+              pwr -= 1
+            elif(ele == "lap"):
+              pwr -= 2
+        scale = scale**pwr
         
       elif(self.dim == 2):
         x3 = self.domain.verts[vs[2]][0]
@@ -914,19 +1051,24 @@ class FEMcalc(object):
         
       for i1 in range(len(self.dofs[eleIdx])):
         rowIdx = self.dofs[eleIdx][i1]
-        if(rowIdx < 0):
-          continue
         for i2 in range(i1, len(self.dofs[eleIdx])):
           colIdx = self.dofs[eleIdx][i2]
-          if(colIdx < 0):
-            continue
-          
-          val = scale * elemStiffMat[i1,i2]
-          globStiffMat[rowIdx,colIdx] += scale * elemStiffMat[i1,i2]
-          if(rowIdx != colIdx):
-            globStiffMat[colIdx,rowIdx] += scale * elemStiffMat[i2,i1]
+          if(rowIdx >= 0 and colIdx >= 0):
+            globMat[rowIdx,colIdx] += scale * elemMat[i1,i2]
+            if(rowIdx != colIdx):
+              globMat[colIdx,rowIdx] += scale * elemMat[i2,i1]
+          elif( rowIdx >= 0  ):#if the column is a boundary term
+            #TODO: the following is extremely inelegant, 
+            #works only for Berger's with hw B.C. eqn if lval or rval passed
+            if(eleIdx == 0 and lval != 0)
+              bndryVec[rowIdx] += lval * scale * elemMat[i1,i2]
+            elif(eleIdx == -1%len(self.domain.poly) and rval != 0)
+              bndryVec[rowIdx] += rval * scale * elemMat[i1,i2]
 
-    return globStiffMat.tocsr()
+    if(rval == 0 and lval == 0):
+      return globMat.tocsr()
+    else:
+      return [globMat.tocsr(), bndryVec]
 
   def genRHS(self):
     """Generates the RHS for solve
@@ -1025,15 +1167,33 @@ class FEMcalc(object):
               lambda x,y: lhsFunc(trans((x,y))) * rhsFunc((x,y)), 0,1,lambda x: 0, lambda x: x
             )[0]
 
-  def findSolution(self):
+  def findSolution(self, maxT = 1, CFL_const = .5):
     """Finds the solution once everything has been created
     """
-    self.soln = spla.spsolve(self.globStiffMat,self.rhs)
+    if(self.probType == 0):
+      self.soln = spla.spsolve(self.globStiffMat,self.rhs)
+    else:
+      t = 0.0
+      self.outputFile = open(\
+        time.strftime("out/%Y_%M_%d_%H_%M_FEM.dat",time.localtime()),\
+        'w')
+      while(t < maxT)
+        dt = self.domain.verts[self.poly[0][1]][0] - 
+          self.domain.verts[self.poly[0][0]][0]
+        dt /= max(abs(self.soln))
+        dt *= CFL_const
+        self.soln = timeStep(self.soln, self.updateF, 1, dt)
+        
+        self.outputFile.write(\
+          "\n\nt\t\t| vals\n%f | %s"%(t, self.soln))
  
+    self.outputFile.close();
+
   def __call__(self,x):
     """Returns the value of the solution at x
 
     If x is not inside the mesh, will return nan
+    This does not quite work for Berger's equn
     """
     if(x in self.domain.verts):
       vidx = self.domain.verts.tolist().index(list(x))
