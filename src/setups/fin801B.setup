@@ -1,0 +1,20 @@
+#Setup file for FEM method
+#Problem 1A with 40 elements
+
+#Mesh definition file
+MESH:
+file= meshes/fin80
+
+SPACE:
+PD 2 #polynomial approximation of degree 2
+
+#definition for berger's equation -> u_t + u_x = eps * u_xx
+BERGER:
+streamline
+IC= p1IC 
+LAP_EPS= .01 
+TIME= .01 
+Output_file= outs/prob1A40.out 
+CFL_CONST= .5 
+
+funcfile= finalIC.py

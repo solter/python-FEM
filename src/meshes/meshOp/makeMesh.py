@@ -1,18 +1,19 @@
 import numpy as np
 
-def make1dMesh(n):
-  with open("1deq%d.node"%n,'w') as f:
-    s = "#Uniform 1d mesh on [0,1] with %d partitions\n"%n
+def make1dMesh(n, xl = 0, xr = 1, name = "1deq"):
+
+  with open("%s%d.node"%(name,n),'w') as f:
+    s = "#Uniform 1d mesh on [%g,%g] with %d partitions\n"%(xl,xr,n)
     f.write(s)
     s = "%d 1 0 1\n"%(n+1)
     f.write(s)
-    xs = np.linspace(0,1,n+1)
+    xs = np.linspace(xl, xr, n+1)
     for i in range(len(xs)):
-      s = "%d %f %d\n"%(i+1, xs[i], xs[i] == 0 or xs[i] == 1)
+      s = "%d %f %d\n"%(i+1, xs[i], xs[i] == xl or xs[i] == xr)
       f.write(s)
 
-  with open("1deq%d.ele"%n,'w') as f:
-    s = "#Uniform 1d mesh on [0,1] with %d partitions\n"%n
+  with open("%s%d.ele"%(name,n),'w') as f:
+    s = "#Uniform 1d mesh on [%g,%g] with %d partitions\n"%(xl,xr,n)
     f.write(s)
     s = "%d 2 0\n"%(n)
     f.write(s)

@@ -1,0 +1,32 @@
+#Setup file for FVM method
+
+#all lines beginning with hash (#) are comments
+#anything added after necesary stuff (after space) is a comment
+#All whitespace shown is necesary, but extra whitespace
+#is ok. e.g. 1HD is bad, 1 HD is good, 1    HD works too
+
+#Each section title is all capitalized and
+#ends with a colon (:)
+#the sections can be in any order
+
+#Mesh definition file
+MESH:
+#location and base name for mesh files
+#This must have a <name>.node and <name>.ele file
+file= meshes/fin160
+#boundary values are assumed to be periodic
+
+#definition of FVM formulation
+#This currently assumes Berger's equation
+FVM_FORM:
+#the order of reconstruction for point values
+recon_order= 3
+#the order to use for the time integration, 1 or 3 supported
+timeOrder= 3
+#the numerical flux to use. "GLF" (global lax-freidrichs) and "Godunov" supported
+numFlux= GLF
+#the initial condition. The first input is the name of the file containing the function,
+#the second input is the name of the function used in the file
+initCondition= finalIC p2IC
+#how long to run the simulation to
+runTo= 0.2
