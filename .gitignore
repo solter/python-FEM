@@ -37,5 +37,6 @@ nosetests.xml
 .pydevproject
 
 #ignore all outputs
+src/out/*
 src/outputs/*
 src/outputs.zip

@@ -4,6 +4,7 @@
 #Mesh definition file
 MESH:
 file= meshes/fin40
+1 HD #flag 1 is homogenous dirichlet boundary, not quite true in Berger
 
 SPACE:
 PD 2 #polynomial approximation of degree 2
@@ -14,7 +15,7 @@ streamline
 IC= p1IC 
 LAP_EPS= .01 
 TIME= .01 
-Output_file= outs/prob1A40.out 
+Output_file= out/prob1B40.dat 
 CFL_CONST= .5 
 
-funcfile= finalIC.py
+funcfile= finalIC

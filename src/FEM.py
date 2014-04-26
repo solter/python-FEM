@@ -1,4 +1,5 @@
 import numpy as np
+import time
 import numpy.linalg as la
 import scipy as sp
 import scipy.sparse as sparse
@@ -231,6 +232,9 @@ class polynom(object):
       p1(('t',1)) = x + 2
     """
     
+    if(~isinstance(x, tuple)):
+      x = (x,)
+
     if(len(x) != self.dim):
       raise NameError("Input need the right dimensions")
 
@@ -554,14 +558,15 @@ class FEMcalc(object):
       rval = self.IC(self.domain.verts[-1][0]) 
       
       #form the mass matrix
-      tmpBlin = [["eval"],["eval"]]
+      tmpBlin = [[["eval"]],[["eval"]]]
       tmpEle = self.genElemMat(tmpBlin) 
-      [self.globMassMat, self.bndry] = self.genGlobMat(tmpEle, tmpBlin, lval, rval)
+      [self.globMassMat, self.bndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
       
       #form the stiffness matrix
-      tmpBlin = [["grad"],["grad"]]
-      tmpEle = genElemMat(tmpBlin)
-      [self.globStiffMat, tmpBndry] = self.eps * self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
+      tmpBlin = [[["grad"]],[["grad"]]]
+      tmpEle = self.genElemMat(tmpBlin)
+      [self.globStiffMat, tmpBndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
+      self.globStiffMat *= self.eps
       self.bndry += self.eps * tmpBndry
       
       #take care of extra terms needed for streamline diffusion
@@ -574,14 +579,14 @@ class FEMcalc(object):
           )*max(abs(lval),abs(rval))
         
         #mass matrix
-        tmpBlin = [["eval"],["grad"]]
+        tmpBlin = [[["eval"]],[["grad"]]]
         tmpEle = genElemMat(tmpBlin)
         [tmpMat, tmpBndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
         self.globMassMat = self.globMassMat + h * tmpMat
         self.bndry = self.bndry + h*tmpBndry
         
         #stiffness matrix
-        tmpBlin = [["grad"],["lap"]]
+        tmpBlin = [[["grad"]],[["lap"]]]
         tmpEle = genElemMat(tmpBlin)
         [tmpMat, tmpBndry] = self.genGlobalMat(tmpEle, tmpBlin, lval, rval)
         self.globStiffMat = self.globStiffMat + self.eps * h * tmpMat
@@ -591,8 +596,8 @@ class FEMcalc(object):
       self.globStiffMat = self.globStiffMat.transpose()
       self.globMassMat = self.globMassMat.transpose()
       self.bndry = self.bndry.transpose()
-      self.soln = np.zeros(len(self.globStiffMat))
-      self.soln = self.initSoln(self.IC)
+      self.soln = np.zeros(len(self.bndry))
+      self.initSoln(self.IC)
       
       #find solution
       self.findSolution(self.maxT, self.cfl)
@@ -833,8 +838,8 @@ class FEMcalc(object):
     
     if(len(self.elemStiffMat) == 0):
       raise NameError("Must generate polys on ref element before calling genElemMat")
-
-    elemStiffMat = np.zeros(self.elemStiffMat.size)
+    
+    elemStiffMat = np.zeros(self.elemStiffMat.shape)
     rownum = -1
     #for each polynomial, on right hand side of inner product
     for polyU in self.refPolys:
@@ -863,7 +868,7 @@ class FEMcalc(object):
               raise NameError("%s not currently supported"%blin[0][i][j])
         #else if its a string
         else:
-          raise NameError("%s not currently supported"%blin[0][i])
+          raise NameError("'%s' not currently supported"%blin[0][i])
         
         #for each polynomial on left hand side of inner product
         for polyV in self.refPolys: 
@@ -880,11 +885,11 @@ class FEMcalc(object):
                   polyRight.append(polyV.diff(dim))
               elif(blin[0][i][j] == "lap"):
                 #calculate the lapacian
-                polyLeft.append(polynom(self.dim,0))
+                polyRight.append(polynom(self.dim,0))
                 for dim in range(self.dim):
-                  polyLeft[0] = polyLeft[0] + polyV.diff(dim).diff(dim)
+                  polyRight[0] = polyRight[0] + polyV.diff(dim).diff(dim)
               elif(blin[0][i][j] == "eval"):
-                polyLeft.append(polyV)
+                polyRight.append(polyV)
               else:
                 raise NameError("%s not currently supported"%blin[0][i][j])
           else:
@@ -899,14 +904,13 @@ class FEMcalc(object):
           p2int = polynom(self.dim,0)
           for i2 in range(len(polyLeft)):
             p2int = p2int + polyLeft[i2]*polyRight[i2]
-          
           elemStiffMat[rownum,colnum] = p2int.integrate((),())
            
     return elemStiffMat
 
   def updateF(self, coef):
     coef = np.array(coef)
-    rhs = np.zeros(coef.size)
+    rhs = np.zeros(coef.shape)
     
     for eleIdx in range(len(self.domain.poly)):
       vs = self.domain.poly[eleIdx]
@@ -919,13 +923,13 @@ class FEMcalc(object):
       for i in range(len(self.dofs[eleIdx])):
         idx = self.dofs[eleIdx][i]
         if(idx < 0):#deal with edges
-          if(eleIdx == 0 && self.IC(xl) != 0):#left edge
+          if(eleIdx == 0 and self.IC(xl) != 0):#left edge
             u = u + self.IC(xl) * self.refPolys[0]
-            if(self.probType == 2)
+            if(self.probType == 2):
               ux = ux + self.IC(xl) * self.refPolys[0]
-          elif(eleIdx == len(self.domain.poly) - 1 && self.IC(xl) != 0):#right edge
+          elif(eleIdx == len(self.domain.poly) - 1 and self.IC(xl) != 0):#right edge
             u = u + self.IC(xr) * self.refPolys[-1]
-            if(self.probType == 2)
+            if(self.probType == 2):
               ux = ux + self.IC(xr) * self.refPolys[-1]
         else:
           u = u + coef[idx] * self.refPolys[i]
@@ -936,13 +940,13 @@ class FEMcalc(object):
       for i in range(len(self.dofs[eleIdx])):
         idx = self.dofs[eleIdx][i]
         if(idx >= 0):
-          if(probType == 1):#FEM
+          if(self.probType == 1):#FEM
             #integrate .5 * u^2 * phi_j'
             rhs[idx] += simpQuad(\
               lambda x: .5 * ( u( (x-xl)/(xr-xl) ) )**2 * \
                 self.refPolys[i].diff()( (x - xl)/(xr-xl) )/(xr - xl),\
               xl,xr)
-          elif(probType == 2):#streamline
+          elif(self.probType == 2):#streamline
             #integrate u * u_x * (phi_j + h*phi_j')
             #note that the h cancels out due to the derivative
             rhs[idx] += simpQuad(lambda x: u( (x - xl)/(xr - xl) )*\
@@ -950,9 +954,9 @@ class FEMcalc(object):
               ( self.refPolys[i]( (x - xl)/(xr - xl) ) +\
               self.refPolys[i]( (x - xl)/(xr - xl) ) )\
               ,xl,xr)
-
+    
     rhs = rhs - self.globStiffMat.dot(coef) - self.bndry
-    return la.solve(self.globMassMat,rhs)
+    return spla.spsolve(self.globMassMat,np.array(rhs))
 
   def genGlobalMat(self,elemMat, blin = [["grad"],["grad"]], lval = 0, rval = 0):
     """Generates the global stiffness matrix
@@ -1014,6 +1018,8 @@ class FEMcalc(object):
             globDOF += 1
         
         self.dofs.append(eleDOF)
+    else:
+      globDOF = len(self.bndry)
 
     globMat = sparse.lil_matrix((globDOF,globDOF))
     bndryVec = np.zeros(globDOF)
@@ -1062,9 +1068,9 @@ class FEMcalc(object):
           elif( rowIdx >= 0  ):#if the column is a boundary term
             #TODO: the following is extremely inelegant, 
             #works only for Berger's with hw B.C. eqn if lval or rval passed
-            if(eleIdx == 0 and lval != 0)
+            if(eleIdx == 0 and lval != 0):
               bndryVec[rowIdx] += lval * scale * elemMat[i1,i2]
-            elif(eleIdx == -1%len(self.domain.poly) and rval != 0)
+            elif(eleIdx == -1%len(self.domain.poly) and rval != 0):
               bndryVec[rowIdx] += rval * scale * elemMat[i1,i2]
 
     if(rval == 0 and lval == 0):
@@ -1082,7 +1088,7 @@ class FEMcalc(object):
     xr = self.domain.verts[-1][0]
     dx = float(xr - xl)/numInt
     for i in range(0,len(self.soln)):
-      self.soln[i] = IC(i*dx)
+      self.soln[i] = IC(xl + i*dx)
 
   def genRHS(self):
     """Generates the RHS for solve
@@ -1188,16 +1194,16 @@ class FEMcalc(object):
       self.soln = spla.spsolve(self.globStiffMat,self.rhs)
     else:
       t = 0.0
-      self.outputFile = open(\
-        time.strftime("out/%Y_%M_%d_%H_%M_FEM.dat",time.localtime()),\
-        'w')
-      while(t < maxT)
-        dt = self.domain.verts[self.poly[0][1]][0] - 
-          self.domain.verts[self.poly[0][0]][0]
+      if(self.outputFile == None):
+        self.outputFile = time.strftime("out/%Y_%M_%d_%H_%M_FEM.dat",time.localtime())
+      self.outputFile = open(self.outputFile,'w')
+      while(t < maxT):
+        dt = self.domain.verts[self.domain.poly[0][1]][0] - \
+          self.domain.verts[self.domain.poly[0][0]][0]
         dt /= max(abs(self.soln))
         dt *= CFL_const
         self.soln = timeStep(self.soln, self.updateF, 1, dt)
-        
+        t += dt
         self.outputFile.write(\
           "\n\nt\t\t| vals\n%f | %s"%(t, self.soln))
  
@@ -1349,7 +1355,7 @@ def simpQuad(f,xl,xr):
     p8 * f( (xr + xl)/2.) +\
     p5 * f( (xr - xl)/2. * (pos - 1) + xr)
      
-  return (xr - xl) * toret / 2.
+  return 2. * toret / (xr - xl)
 
 def timeStep(u, F, order, dt):
   """Perform time integration up

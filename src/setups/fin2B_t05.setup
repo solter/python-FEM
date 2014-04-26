@@ -30,3 +30,5 @@ numFlux= GLF
 initCondition= finalIC p2IC
 #how long to run the simulation to
 runTo= 0.05
+Output_file= out/2B05.dat
+CFL_CONST= .1
