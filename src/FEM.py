@@ -591,6 +591,8 @@ class FEMcalc(object):
       self.globStiffMat = self.globStiffMat.transpose()
       self.globMassMat = self.globMassMat.transpose()
       self.bndry = self.bndry.transpose()
+      self.soln = np.zeros(len(self.globStiffMat))
+      self.soln = self.initSoln(self.IC)
       
       #find solution
       self.findSolution(self.maxT, self.cfl)
@@ -1069,6 +1071,18 @@ class FEMcalc(object):
       return globMat.tocsr()
     else:
       return [globMat.tocsr(), bndryVec]
+
+  def initSoln(self, IC):
+    """Initializes the solution using interpolation,
+    assuming mesh is sane (from left to right)
+    """
+
+    numInt = len(self.soln) + 1
+    xl = self.domain.verts[0][0]
+    xr = self.domain.verts[-1][0]
+    dx = float(xr - xl)/numInt
+    for i in range(0,len(self.soln)):
+      self.soln[i] = IC(i*dx)
 
   def genRHS(self):
     """Generates the RHS for solve
