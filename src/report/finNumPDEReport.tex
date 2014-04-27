@@ -49,6 +49,7 @@
 \begin{flushright}
 Numerical PDE's final Project\\
 Peter Solfest
+Code available at \url{https://github.com/solter/python-FEM}
 \end{flushright}
 % <---- TITLE END ----> %
 
@@ -88,9 +89,132 @@ The figures in appendix \ref{app:FVM} display the solutions.
 % <---- NORMAL MODE END ----> %
 \appendix
 \section{Problem 1 Figures}\label{app:FEM}
+Note that above each figure represents different times during the solution.
+The figures are labelled via the number of intervals ($N$),
+whether a standard or streamline method was used, and the initial condition.
+
+\begin{figure}[h!]
+        \centering
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin401A_1}
+        \end{subfigure}%
+        ~ 
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin401A_2}
+        \end{subfigure}
+        
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin401A_3}
+        \end{subfigure}
+        ~
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin401A_4}
+        \end{subfigure}
+        \caption{$N = 40$ via standard with $u(x,0) = -.5x + .5$}
+\end{figure}
+
+\begin{figure}[h!]
+        \centering
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin401B_1}
+        \end{subfigure}%
+        ~ 
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin401B_2}
+        \end{subfigure}
+        
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin401B_3}
+        \end{subfigure}
+        ~
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin401B_4}
+        \end{subfigure}
+        \caption{$N = 40$ via streamline with $u(x,0) = -.5x + .5$}
+\end{figure}
+
+\begin{figure}[h!]
+        \centering
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A_1}
+        \end{subfigure}%
+        ~ 
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A_2}
+        \end{subfigure}
+        
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A_3}
+        \end{subfigure}
+        ~
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A_4}
+        \end{subfigure}
+        \caption{$N = 80$ via standard with $u(x,0) = -.5x + .5$}
+\end{figure}
+
+\begin{figure}[h!]
+        \centering
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B_1}
+        \end{subfigure}%
+        ~ 
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B_2}
+        \end{subfigure}
+        
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B_3}
+        \end{subfigure}
+        ~
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B_4}
+        \end{subfigure}
+        \caption{$N = 80$ via standard with $u(x,0) = -.5x + .5$}
+\end{figure}
+
+\begin{figure}[h!]
+        \centering
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A2_1}
+        \end{subfigure}%
+        ~ 
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A2_2}
+        \end{subfigure}
+        
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A2_3}
+        \end{subfigure}
+        ~
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A2_4}
+        \end{subfigure}
+        \caption{$N = 80$ via standard with $u(x,0) = 1 - x^2$}
+\end{figure}
+
+\begin{figure}[h!]
+        \centering
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B2_1}
+        \end{subfigure}%
+        ~ 
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B2_2}
+        \end{subfigure}
+        
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B2_3}
+        \end{subfigure}
+        ~
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B2_4}
+        \end{subfigure}
+        \caption{$N = 80$ via standard with $u(x,0) = 1 - x^2$}
+\end{figure}
 
 \section{Problem 2 Figures}\label{app:FVM}
-Note that above each figure is the time when it was extracted from.
+Note that above each figure represents different times during the solution.
 Beneath each group of 4 figures the following code is used
 \begin{itemize}
 	\item RO: The ENO reconstruction accuracy used

@@ -154,7 +154,7 @@ class FVMcalc(object):
       t += dt
       if((t-dt)%(self.endTime/4) > t%(self.endTime/4) and toplt):
         fignum += 1
-        pltSoln(self)
+        pltSoln(self, [self.initCond, "Init. Cond."])
         plt.title("t = %g"%t)
         plt.savefig("%s_%d.png"%(self.outputFileName.split(".")[0],fignum))
         plt.close()
@@ -319,6 +319,7 @@ def pltSoln(FVMcalcObj,xargs = []):
   
   tmpx = FVMcalcObj.domain.verts
   y = np.zeros(len(tmpx) - 1)
+  y1 = np.zeros(len(tmpx) - 1)
   x = np.zeros(len(tmpx) - 1)
   for i in range(len(y)):
     x[i] = 0.5*(tmpx[i+1][0] + tmpx[i][0])

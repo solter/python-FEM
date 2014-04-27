@@ -540,6 +540,7 @@ class FEMcalc(object):
     self.bndry = np.array([])
     self.maxT = 0 #the maximum time to run the simulation to
     self.outputFile = None #the name of the output file
+    self.outputFileName = None #the name of the output file
     self.cfl = .5 #the cfl constant used to determine the time step
 
     self.parseInputFile(fname)
@@ -732,7 +733,7 @@ class FEMcalc(object):
             except ValueError:
               raise NameError("end time must be a float")
           elif(rdln[0] == "Output_file="):
-            self.outputFile = rdln[1]
+            self.outputFileName = rdln[1]
           elif(rdln[0] == "CFL_CONST="):
             try:
               self.cfl = float(rdln[1])
@@ -926,40 +927,42 @@ class FEMcalc(object):
           if(eleIdx == 0 and self.IC(xl) != 0):#left edge
             u = u + self.IC(xl) * self.refPolys[0]
             if(self.probType == 2):
-              ux = ux + self.IC(xl) * self.refPolys[0]
+              ux = ux + self.IC(xl) * self.refPolys[0].diff()
           elif(eleIdx == len(self.domain.poly) - 1 and self.IC(xl) != 0):#right edge
             u = u + self.IC(xr) * self.refPolys[-1]
             if(self.probType == 2):
-              ux = ux + self.IC(xr) * self.refPolys[-1]
+              ux = ux + self.IC(xr) * self.refPolys[-1].diff()
         else:
           u = u + coef[idx] * self.refPolys[i]
           if(self.probType == 2):
             ux = ux + coef[idx] * self.refPolys[i].diff()
      
       #populate the update vector for the quadratic term
+      print "u = %s"%u
       for i in range(len(self.dofs[eleIdx])):
         idx = self.dofs[eleIdx][i]
         if(idx >= 0):
           if(self.probType == 1):#FEM
             #integrate .5 * u^2 * phi_j'
-            print "u = %s"%u
             rhs[idx] += simpQuad(\
               lambda x: .5 * ( u( (x-xl)/(xr-xl) ) )**2 * \
-                self.refPolys[i].diff()( (x - xl)/(xr-xl) )*(xr - xl),\
+                self.refPolys[i].diff()( (x - xl)/(xr-xl) )/(xr - xl),\
               xl,xr)
           elif(self.probType == 2):#streamline
             #integrate u * u_x * (phi_j + h*phi_j')
-            #note that the h is squared due to the derivative
+            #note that the h cancels due to the derivative
             rhs[idx] += simpQuad(lambda x: u( (x - xl)/(xr - xl) )*\
-              ux( (x - xl)/(xr - xl) )*(xr - xl) *\
+              ux( (x - xl)/(xr - xl) )/(xr - xl) *\
               ( self.refPolys[i]( (x - xl)/(xr - xl) ) +\
-              self.refPolys[i].diff()( (x - xl)/(xr - xl) )*(xr-xl)**2 )\
+              self.refPolys[i].diff()( (x - xl)/(xr - xl) ) )\
               ,xl,xr)
+
  
+    print "Q = %s"%(rhs[0:2])
     #print "Q = %s\nStiff = %s\nself.bndry = %s"%(rhs, self.globStiffMat, self.bndry)
-    print "rhs val = %g"%(max(rhs))
+    #print "rhs val = %g"%(max(rhs))
     rhs = rhs - self.globStiffMat.dot(coef) - self.bndry
-    print "rhs val = %g"%(max(rhs))
+    print "rhs val = %s"%(rhs[0:2])
     #print "Mass = %s\nrhs = %s"%(self.globMassMat, rhs)
     return spla.spsolve(self.globMassMat,np.array(rhs))
 
@@ -1200,9 +1203,10 @@ class FEMcalc(object):
       self.soln = spla.spsolve(self.globStiffMat,self.rhs)
     else:
       t = 0.0
-      if(self.outputFile == None):
-        self.outputFile = time.strftime("out/%Y_%M_%d_%H_%M_FEM.dat",time.localtime())
-      self.outputFile = open(self.outputFile,'w')
+      if(self.outputFileName == None):
+        self.outputFileName = time.strftime("out/%Y_%M_%d_%H_%M_FEM.dat",time.localtime())
+      self.outputFile = open(self.outputFileName,'w')
+      fignum = 0
       while(t < maxT):
         dt = self.domain.verts[self.domain.poly[0][1]][0] - \
           self.domain.verts[self.domain.poly[0][0]][0]
@@ -1211,10 +1215,11 @@ class FEMcalc(object):
         oldSol = self.soln
         self.soln = timeStep(self.soln, self.updateF, 1, dt)
         t += dt
-        if((t-dt)%(self.maxT/4) > t%(self.maxT)/4 and toplt):
-          pltSoln(self)
+        if((t-dt)%(self.maxT/4) > t%(self.maxT/4) and toplt):
+          fignum += 1
+          pltSoln(self,[self.IC,"Init. Cond."])
           plt.title("t = %g"%(t))
-          plt.savefig("%s.%d.png"%(self.outputFile,int(100*t)))
+          plt.savefig("%s_%d.png"%(self.outputFileName.split(".")[0],fignum))
           plt.close()
         self.outputFile.write(\
           "\n\nt\t\t| vals\n%f | %s"%(t, self.soln))
@@ -1329,16 +1334,16 @@ def pltSoln(FEMcalcObj,xargs = []):
     y = [FEMcalcObj.domain.verts[0][0]] + FEMcalcObj.soln + [FEMcalcObj.domain.verts[-1][0]]
     x = np.linspace(FEMcalcObj.domain.verts[0][0],FEMcalcObj.domain.verts[-1][0],len(y))
     fig = plt.figure()
-    """
-    x = FEMcalcObj.domain.verts
-    y = np.zeros(len(x))
+    
+    #x = FEMcalcObj.domain.verts
+    #y = np.zeros(len(x))
     if(len(xargs) == 2):
       y1 = np.zeros(len(x))
     for i in range(len(x)):
-      y[i] = FEMcalcObj(x[i])
+      #y[i] = FEMcalcObj(x[i])
       if(len(xargs) == 2):
         y1[i] = xargs[0](x[i])
-    """
+    
     
     fig = plt.figure()
     plt.plot(x,y,label = 'num. soln.')
@@ -1392,7 +1397,7 @@ def timeStep(u, F, order, dt):
   u = np.array(u)
   if(order == 1):#forward euler 
     tmp = np.array(F(u))
-    print "maxChange = %g => %g"%(max(tmp), dt * max(tmp))
+    #print "maxChange = %g => %g"%(max(tmp), dt * max(tmp))
     return ( u + dt * np.array(F(u)) )
 
   elif(order == 3):#TVD RK3

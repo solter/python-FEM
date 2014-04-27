@@ -14,7 +14,7 @@ BERGER:
 standard
 IC= p1IC2
 LAP_EPS= .01 
-TIME= 0.2 
+TIME= 0.1
 Output_file= out/fin801A2.dat 
 CFL_CONST= .5 
 

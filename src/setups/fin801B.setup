@@ -14,7 +14,7 @@ BERGER:
 streamline
 IC= p1IC 
 LAP_EPS= .01 
-TIME= .01 
+TIME= .1
 Output_file= out/fin801B.dat 
 CFL_CONST= .5 
 
