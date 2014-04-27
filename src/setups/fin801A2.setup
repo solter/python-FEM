@@ -3,7 +3,7 @@
 
 #Mesh definition file
 MESH:
-file= meshes/fin80
+file= meshes/fin40
 1 HD #flag 1 is homogenous dirichlet boundary, not quite true in Berger
 
 SPACE:

@@ -58,7 +58,7 @@ Code available at \url{https://github.com/solter/python-FEM}
 \section{Problem 1}
 The equation $u_t + \left(\dfrac{u^2}{2}\right)_x = \varepsilon u_{xx}$ was solved on the interval $x \in [-1,1]$, $\varepsilon = 0.01$ until $T = 0.1$.
 
-With the boundary conditions $u(-1) = 1$ and $u(1) = 0$, and initial conditions $u(x,0) = -.5x + .5$ and $u(x,0) = 1 - x^2$.
+With the boundary conditions $u(-1,t) = u(-1,0)$ and $u(1,t) = U(1,0)$, and initial conditions $u(x,0) = -.5x + .5$ and $u(x,0) = 1 - x^2$.
 
 $[-1,1]$ was meshed into $N$ equi-length intervals with $N = 40,80$.
 
@@ -67,6 +67,10 @@ to solve the system, using forward euler for the time integration,
 with 1 and 3 point quadrature schemes used for the nonlinear term.
 
 The figures in appendix \ref{app:FEM} display the solutions.
+
+The results indicate that both streamline and standard FEM methods
+suffer from oscillations in the solution near the non-0 edge, 
+and mesh refinement exacerbates the oscillations.
 
 % <--- Problem 1 ---> %
 \section{Problem 2}
@@ -81,15 +85,26 @@ Finite volume methods were used to solve this.
 An ENO scheme (both $3^{rd}$ and $1^{st}$ order) were used for
 the interface value reconstructions.
 Both forward euler and a TVD RK3 solver were used for the time integration,
-and the numerical fluxes were reconstructed using Godunov and Global Lax-Friedrichs schemes.
+and the numerical fluxes were reconstructed using Godunov and Global Lax-Friedrichs (GLF) schemes.
 
 The figures in appendix \ref{app:FVM} display the solutions.
 
+The results indicate that for first order solutions (in time and reconstruction)
+the Godunov experiences an oscillation as it approaches a shock,
+this is especially noticeable after letting time run to 1.
+Whereas GLF's variation seems to be bounded by the original function,
+even as it approaches the shock.
+
+When third order reconstructions and time stepping are used,
+the bounded variation displayed by the GLF scheme disappears.
+
+The explosion in the Godunov solution is surprising, as ENO reconstructions
+are supposed to display TVB behavior.
 
 % <---- NORMAL MODE END ----> %
 \appendix
 \section{Problem 1 Figures}\label{app:FEM}
-Note that above each figure represents different times during the solution.
+Note that above each figure represents different times during the solution, with the initial solution plotted for reference.
 The figures are labelled via the number of intervals ($N$),
 whether a standard or streamline method was used, and the initial condition.
 
@@ -128,9 +143,51 @@ whether a standard or streamline method was used, and the initial condition.
         \end{subfigure}
         ~
         \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin401B_4}
+               \textbf{Solution diverged}
         \end{subfigure}
         \caption{$N = 40$ via streamline with $u(x,0) = -.5x + .5$}
+\end{figure}
+
+
+
+\begin{figure}[h!]
+        \centering
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A2_1}
+        \end{subfigure}%
+        ~ 
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A2_2}
+        \end{subfigure}
+        
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A2_3}
+        \end{subfigure}
+        ~
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801A2_4}
+        \end{subfigure}
+        \caption{$N = 40$ via standard with $u(x,0) = 1 - x^2$}
+\end{figure}
+
+\begin{figure}[h!]
+        \centering
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B2_1}
+        \end{subfigure}%
+        ~ 
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B2_2}
+        \end{subfigure}
+        
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B2_3}
+        \end{subfigure}
+        ~
+        \begin{subfigure}[b]{0.4\textwidth}
+                \includegraphics[width=\textwidth]{fin801B2_4}
+        \end{subfigure}
+        \caption{$N = 40$ via streamline with $u(x,0) = 1 - x^2$}
 \end{figure}
 
 \begin{figure}[h!]
@@ -160,66 +217,20 @@ whether a standard or streamline method was used, and the initial condition.
         \end{subfigure}%
         ~ 
         \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801B_2}
+        \textbf{Solution diverged}
         \end{subfigure}
         
-        \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801B_3}
-        \end{subfigure}
-        ~
-        \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801B_4}
-        \end{subfigure}
         \caption{$N = 80$ via standard with $u(x,0) = -.5x + .5$}
 \end{figure}
 
-\begin{figure}[h!]
-        \centering
-        \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801A2_1}
-        \end{subfigure}%
-        ~ 
-        \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801A2_2}
-        \end{subfigure}
-        
-        \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801A2_3}
-        \end{subfigure}
-        ~
-        \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801A2_4}
-        \end{subfigure}
-        \caption{$N = 80$ via standard with $u(x,0) = 1 - x^2$}
-\end{figure}
-
-\begin{figure}[h!]
-        \centering
-        \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801B2_1}
-        \end{subfigure}%
-        ~ 
-        \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801B2_2}
-        \end{subfigure}
-        
-        \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801B2_3}
-        \end{subfigure}
-        ~
-        \begin{subfigure}[b]{0.4\textwidth}
-                \includegraphics[width=\textwidth]{fin801B2_4}
-        \end{subfigure}
-        \caption{$N = 80$ via standard with $u(x,0) = 1 - x^2$}
-\end{figure}
-
+\newpage
 \section{Problem 2 Figures}\label{app:FVM}
-Note that above each figure represents different times during the solution.
+Note that above each figure represents different times during the solution,
+with the initial condition plotted for reference.
 Beneath each group of 4 figures the following code is used
 \begin{itemize}
 	\item RO: The ENO reconstruction accuracy used
 	\item OT: The order of accuracy for the time integration method (1 is forward euler, 3 is TVD RK3)
-	\item flx: Whether a Godunov or GLF flux was used 
 \end{itemize}
 
 \begin{figure}[h!]

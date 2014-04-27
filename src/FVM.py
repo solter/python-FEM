@@ -97,7 +97,7 @@ class FVMcalc(object):
           elif(rdln[0] == "CFL_CONST="):
             try:
               self.cfl = float(rdln[1])
-              print "cfl = %g"%self.cfl
+              #print "cfl = %g"%self.cfl
             except ValueError:
               raise NameError("CFL_CONST must be a float")
 
@@ -152,7 +152,7 @@ class FVMcalc(object):
       dt *= self.cfl
       self.soln = timeStep(self.soln, self.updateF, self.timeOrder, dt)
       t += dt
-      if((t-dt)%(self.endTime/4) > t%(self.endTime/4) and toplt):
+      if((t-dt)%(self.endTime/4) >= t%(self.endTime/4) and toplt):
         fignum += 1
         pltSoln(self, [self.initCond, "Init. Cond."])
         plt.title("t = %g"%t)
@@ -201,17 +201,20 @@ class FVMcalc(object):
     #calculate polynomial, via Ac = b, where c is the coeficient list
     A = np.zeros((self.recOrder,self.recOrder),dtype=float)
     b = np.zeros(self.recOrder)
-    
+   
+    #for the whole stencil
     for i in range(self.recOrder):
       xl = self.domain.verts[self.domain.poly[stencil[i]][0]][0]
       xr = self.domain.verts[self.domain.poly[stencil[i]][1]][0]
       #check if this needs to wrap around:
       if(stencil[i] - stencil[0] > self.recOrder - 1):#push back
-        xl -= self.domain.verts[self.domain.poly[0][0]][0]
-        xr -= self.domain.verts[self.domain.poly[0][0]][0]
+        intD = self.domain.verts[-1][0] - self.domain.verts[0][0]
+        xl -= intD
+        xr -= intD
       elif(stencil[0] - stencil[i] > self.recOrder - 1):#push forward
-        xl += self.domain.verts[self.domain.poly[-1][1]][0]
-        xr += self.domain.verts[self.domain.poly[-1][1]][0]
+        intD = self.domain.verts[-1][0] - self.domain.verts[0][0]
+        xl += intD
+        xr += intD
 
       b[i] = soln[stencil[i]] * (xr - xl)
       for j in range(self.recOrder):
@@ -327,7 +330,7 @@ def pltSoln(FVMcalcObj,xargs = []):
     if(len(xargs) == 2):
       y1[i] = xargs[0](x[i])
   
-  fig = plt.figure()
+  fig = plt.clf()
   plt.plot(x,y,label = 'num. soln.')
   if(len(xargs) == 2):
     plt.plot(x,y1,label = xargs[1])

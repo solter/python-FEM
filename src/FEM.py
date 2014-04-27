@@ -938,31 +938,35 @@ class FEMcalc(object):
             ux = ux + coef[idx] * self.refPolys[i].diff()
      
       #populate the update vector for the quadratic term
-      print "u = %s"%u
+      #print "u = %s"%u
       for i in range(len(self.dofs[eleIdx])):
         idx = self.dofs[eleIdx][i]
         if(idx >= 0):
           if(self.probType == 1):#FEM
             #integrate .5 * u^2 * phi_j'
-            rhs[idx] += simpQuad(\
-              lambda x: .5 * ( u( (x-xl)/(xr-xl) ) )**2 * \
-                self.refPolys[i].diff()( (x - xl)/(xr-xl) )/(xr - xl),\
-              xl,xr)
+            tmpF =  lambda x: \
+              .5 * ( u( (x-xl)/(xr-xl) ) )**2 * \
+              self.refPolys[i].diff()( (x - xl)/(xr-xl) )/(xr - xl)
           elif(self.probType == 2):#streamline
+            #integrate .5 * u^2 * (phi_j' + h phi_j'')
+            #tmpF = lambda x: .5 * ( u( (x-xl)/(xr-xl) ) )**2 * \
+            #    ( self.refPolys[i].diff()( (x - xl)/(xr-xl) )/(xr - xl)\
+            #    + self.refPolys[i].diff().diff()( (x - xl)/(xr-xl) )/(xr - xl))
             #integrate u * u_x * (phi_j + h*phi_j')
             #note that the h cancels due to the derivative
-            rhs[idx] += simpQuad(lambda x: u( (x - xl)/(xr - xl) )*\
+            tmpF = lambda x: -1*u( (x - xl)/(xr - xl) )*\
               ux( (x - xl)/(xr - xl) )/(xr - xl) *\
               ( self.refPolys[i]( (x - xl)/(xr - xl) ) +\
-              self.refPolys[i].diff()( (x - xl)/(xr - xl) ) )\
-              ,xl,xr)
+              self.refPolys[i].diff()( (x - xl)/(xr - xl) ) )
+          
+          rhs[idx] += simpQuad(tmpF, xl, xr)
 
  
-    print "Q = %s"%(rhs[0:2])
+    #print "Q = %s"%(rhs[0:2])
     #print "Q = %s\nStiff = %s\nself.bndry = %s"%(rhs, self.globStiffMat, self.bndry)
     #print "rhs val = %g"%(max(rhs))
-    rhs = rhs - self.globStiffMat.dot(coef) - self.bndry
-    print "rhs val = %s"%(rhs[0:2])
+    #rhs = rhs - self.globStiffMat.dot(coef) - self.bndry
+    #print "rhs val = %s"%(rhs[0:2])
     #print "Mass = %s\nrhs = %s"%(self.globMassMat, rhs)
     return spla.spsolve(self.globMassMat,np.array(rhs))
 
@@ -1211,11 +1215,17 @@ class FEMcalc(object):
         dt = self.domain.verts[self.domain.poly[0][1]][0] - \
           self.domain.verts[self.domain.poly[0][0]][0]
         dt /= max(abs(self.soln))
+        if(max(abs(self.soln)) > 1e10):
+          print "Solution diverged"
+          break
         dt *= CFL_const
         oldSol = self.soln
         self.soln = timeStep(self.soln, self.updateF, 1, dt)
         t += dt
-        if((t-dt)%(self.maxT/4) > t%(self.maxT/4) and toplt):
+        if((t > maxT/4 and t - dt < maxT/4 and toplt ) or\
+          (t > 2*maxT/4 and t - dt < 2*maxT/4 and toplt) or\
+          (t > 3*maxT/4 and t - dt < 3*maxT/4 and toplt) or\
+          (t > maxT and t - dt < maxT and toplt)):
           fignum += 1
           pltSoln(self,[self.IC,"Init. Cond."])
           plt.title("t = %g"%(t))
@@ -1333,7 +1343,6 @@ def pltSoln(FEMcalcObj,xargs = []):
   if(FEMcalcObj.dim == 1):
     y = [FEMcalcObj.domain.verts[0][0]] + FEMcalcObj.soln + [FEMcalcObj.domain.verts[-1][0]]
     x = np.linspace(FEMcalcObj.domain.verts[0][0],FEMcalcObj.domain.verts[-1][0],len(y))
-    fig = plt.figure()
     
     #x = FEMcalcObj.domain.verts
     #y = np.zeros(len(x))
@@ -1345,7 +1354,7 @@ def pltSoln(FEMcalcObj,xargs = []):
         y1[i] = xargs[0](x[i])
     
     
-    fig = plt.figure()
+    fig = plt.clf()
     plt.plot(x,y,label = 'num. soln.')
     if(len(xargs) == 2):
       plt.plot(x,y1,label = xargs[1])
